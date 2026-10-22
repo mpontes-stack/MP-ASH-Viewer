@@ -4,11 +4,14 @@ import com.github.lgooddatepicker.components.DatePickerSettings;
 import com.github.lgooddatepicker.components.DateTimePicker;
 import com.github.lgooddatepicker.components.TimePickerSettings;
 import config.Labels;
+import core.filter.AshFilter;
+import core.filter.FilteredAshLoader;
 import core.manager.ColorManager;
 import core.manager.ConstantManager;
 import core.parameter.ParameterBuilder;
 import core.processing.GetFromRemoteAndStore;
 import gui.chart.ChartDatasetManager;
+import gui.filter.FilterBar;
 import gui.gantt.MonitorGantt2;
 import gui.table.RawDataTable;
 import gui.util.ProgressBarUtil;
@@ -45,6 +48,8 @@ public class MonitorDbPanel {
 
     private ChartDatasetManager chartDatasetManager;
     private MainTabbedPane mainTabbedPane;
+    private AshFilter ashFilter;
+    private FilteredAshLoader filteredAshLoader;
 
     private JSplitPane topActivitySplitPane;
     private JSplitPane detailSplitPane;
@@ -67,13 +72,20 @@ public class MonitorDbPanel {
                           StoreManager storeManager,
                           GetFromRemoteAndStore getFromRemoteAndStore,
                           @Named("mainTabPane") MainTabbedPane mainTabbedPane,
-                          ChartDatasetManager chartDatasetManager) {
+                          ChartDatasetManager chartDatasetManager,
+                          AshFilter ashFilter,
+                          FilteredAshLoader filteredAshLoader) {
         this.jFrame = jFrame;
         this.colorManager = colorManager;
         this.storeManager = storeManager;
         this.getFromRemoteAndStore = getFromRemoteAndStore;
         this.mainTabbedPane = mainTabbedPane;
         this.chartDatasetManager = chartDatasetManager;
+        this.ashFilter = ashFilter;
+        this.filteredAshLoader = filteredAshLoader;
+
+        this.ashFilter.addListener(() -> ProgressBarUtil.runProgressDialog(
+                getFromRemoteAndStore::refreshMainChart, jFrame, Labels.getLabel("gui.filter.applying")));
     }
 
     public void initialize() {
@@ -98,7 +110,13 @@ public class MonitorDbPanel {
         mainGanttAndRaw.add("Raw data", chartDatasetManager.getMainNameChartDataset().getRawDataTable());
         mainGanttAndRaw.add("ASH Report", chartDatasetManager.getMainNameChartDataset().getAshReport());
 
-        topActivitySplitPane.add(chartDatasetManager.getMainNameChartDataset().getStackChartPanel(), JSplitPane.TOP);
+        FilterBar filterBar = new FilterBar(ashFilter, filteredAshLoader, storeManager,
+                getFromRemoteAndStore::getMainChartRange);
+        JPanel topActivityChartPanel = new JPanel(new BorderLayout());
+        topActivityChartPanel.add(filterBar, BorderLayout.NORTH);
+        topActivityChartPanel.add(chartDatasetManager.getMainNameChartDataset().getStackChartPanel(), BorderLayout.CENTER);
+
+        topActivitySplitPane.add(topActivityChartPanel, JSplitPane.TOP);
         topActivitySplitPane.add(mainGanttAndRaw, JSplitPane.BOTTOM);
 
         chartDatasetManager.getMainNameChartDataset().getMonitorGantt2().setHistory(false);

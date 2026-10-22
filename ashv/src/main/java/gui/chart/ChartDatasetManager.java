@@ -2,6 +2,7 @@ package gui.chart;
 
 import config.Labels;
 import config.profile.ConnProfile;
+import core.filter.AshFilter;
 import core.manager.ColorManager;
 import core.processing.GetFromRemoteAndStore;
 import gui.BasicFrame;
@@ -26,6 +27,7 @@ public class ChartDatasetManager {
     private BasicFrame jFrame;
     private ColorManager colorManager;
     private StoreManager storeManager;
+    private AshFilter ashFilter;
 
     @Getter @Setter private GetFromRemoteAndStore getFromRemoteAndStore;
 
@@ -42,11 +44,13 @@ public class ChartDatasetManager {
     public ChartDatasetManager(BasicFrame jFrame,
                                ColorManager colorManager,
                                StoreManager storeManager,
-                               RemoteDBManager remoteDBManager){
+                               RemoteDBManager remoteDBManager,
+                               AshFilter ashFilter){
         this.jFrame = jFrame;
         this.colorManager = colorManager;
         this.storeManager = storeManager;
         this.remoteDBManager = remoteDBManager;
+        this.ashFilter = ashFilter;
     }
 
     public void initialize(){
@@ -64,6 +68,7 @@ public class ChartDatasetManager {
         RawDataTable mainRawDataTable = new RawDataTable(jFrame, storeManager);
         mainStackChartPanel.addChartListenerReleaseMouse(mainRawDataTable);
         mainRawDataTable.setIProfile(iProfile);
+        mainRawDataTable.setAshFilter(ashFilter);
 
         ASHReport ashReport = new ASHReport(jFrame, remoteDBManager);
         mainStackChartPanel.addChartListenerReleaseMouse(ashReport);

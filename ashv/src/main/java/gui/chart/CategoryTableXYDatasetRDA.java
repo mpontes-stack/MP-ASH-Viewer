@@ -40,6 +40,18 @@ public class CategoryTableXYDatasetRDA extends CategoryTableXYDataset implements
         }
     }
 
+    public void setSeriesValueNoNotify(double x, double y, String seriesName){
+        if (!seriesNames.containsValue(seriesName)) {
+            Integer key = !seriesNames.keySet().isEmpty() ?  Collections.max(seriesNames.keySet()) : 0;
+            saveSeriesValues(key+1, seriesName);
+        }
+        add(x, y, seriesName, false);
+    }
+
+    public void notifyChanged(){
+        fireDatasetChanged();
+    }
+
     public void saveSeriesValues(int series, String seriesName){
         seriesNames.put(series, seriesName);
     }

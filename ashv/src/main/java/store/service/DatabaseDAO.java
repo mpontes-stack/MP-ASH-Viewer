@@ -3,6 +3,7 @@ package store.service;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.persist.EntityCursor;
 import config.profile.SqlColProfile;
+import core.filter.AshFilter;
 import core.manager.ConfigurationManager;
 import core.parameter.ParameterBuilder;
 import lombok.Getter;
@@ -70,7 +71,8 @@ public class DatabaseDAO extends QueryService {
 
     public List<Object[][]> getMatrixDataForJTable(long begin, long end,
                                                         String waitClassColName, String waitClassValue,
-                                                                List<SqlColProfile> colMetadataList){
+                                                                List<SqlColProfile> colMetadataList,
+                                                                AshFilter.Matcher filterMatcher){
 
         List<Object[][]> out = new ArrayList<>();
 
@@ -84,6 +86,10 @@ public class DatabaseDAO extends QueryService {
                     Object[][] data = new Object[sl.getMainMatrix().length][colMetadataList.size()];
 
                     for (int row = 0; row < sl.getMainMatrix().length; row++) {
+                        if (filterMatcher != null && !filterMatcher.matches(sl, row)) {
+                            continue;
+                        }
+
                         if (!waitClassValue.isEmpty()){
 
                             Stream<SqlColProfile> sqlColMetadataStream

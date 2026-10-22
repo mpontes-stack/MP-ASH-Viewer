@@ -1,5 +1,7 @@
 package gui.util;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -70,6 +72,9 @@ public class ProgressBarUtil
 
     private static void runProgressBar(final Runnable runnable, final JDialog dialog)
     {
+        final boolean onEdt = SwingUtilities.isEventDispatchThread();
+        final AtomicBoolean finished = new AtomicBoolean(false);
+
         Thread worker = new Thread() {
 
             public void run()
@@ -84,7 +89,13 @@ public class ProgressBarUtil
                 }
                 finally
                 {
-                    dialog.dispose();
+                    finished.set(true);
+                    if (onEdt) {
+                        // dispose after the modal dialog is shown, otherwise it stays open forever
+                        SwingUtilities.invokeLater(dialog::dispose);
+                    } else {
+                        dialog.dispose();
+                    }
                 }
                 return;
             }
@@ -92,7 +103,9 @@ public class ProgressBarUtil
         }
                 ;
         worker.start();
-        dialog.setVisible(true);
+        if (!onEdt || !finished.get()) {
+            dialog.setVisible(true);
+        }
     }
 }
 

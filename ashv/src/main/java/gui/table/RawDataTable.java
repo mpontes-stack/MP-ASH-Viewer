@@ -1,6 +1,7 @@
 package gui.table;
 
 import com.sleepycat.je.DatabaseException;
+import core.filter.AshFilter;
 import gui.BasicFrame;
 import gui.table.searchable.DecoratorFactory;
 import gui.table.searchable.MatchingTextHighlighter;
@@ -16,6 +17,7 @@ import org.jdesktop.swingx.search.AbstractSearchable;
 import org.jdesktop.swingx.search.SearchFactory;
 import org.jfree.chart.util.GanttParam;
 import org.jfree.chart.util.IDetailPanel;
+import config.profile.SqlColProfile;
 import profile.IProfile;
 import store.StoreManager;
 
@@ -28,6 +30,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RawDataTable extends JPanel implements IDetailPanel {
@@ -37,6 +40,7 @@ public class RawDataTable extends JPanel implements IDetailPanel {
     @Getter @Setter private IProfile iProfile;
 
     @Getter @Setter private String waitClassValue = "";
+    @Getter @Setter private AshFilter ashFilter;
     @Getter @Setter private GanttParam ganttParamIn;
 
     private JPanel mainPanel;
@@ -217,9 +221,11 @@ public class RawDataTable extends JPanel implements IDetailPanel {
                                       String waitClassColName, String waitClassValue){
         String moduleName = "ash" + "_" + iProfile.getProfileName();
 
+        List<SqlColProfile> colProfiles = this.storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList();
+        AshFilter.Matcher filterMatcher = (ashFilter != null && ashFilter.isActive()) ? ashFilter.matcher(colProfiles) : null;
+
         this.storeManager.getDatabaseDAO()
-                .getMatrixDataForJTable(begin, end, waitClassColName, waitClassValue,
-                        this.storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList())
+                .getMatrixDataForJTable(begin, end, waitClassColName, waitClassValue, colProfiles, filterMatcher)
                 .forEach(e -> {
                     for(int row = 0; row < e.length; row++){
                         if (e[row][0] != null) {

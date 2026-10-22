@@ -7,6 +7,8 @@ import config.profile.ConnProfile;
 import config.profile.SqlColProfile;
 import core.manager.ColorManager;
 import core.manager.ConfigurationManager;
+import core.filter.AshFilter;
+import core.filter.FilteredAshLoader;
 import core.manager.ConstantManager;
 import core.parameter.ParameterBuilder;
 import gui.chart.CategoryTableXYDatasetRDA;
@@ -79,6 +81,8 @@ public class GetFromRemoteAndStore {
     private RawStoreManager rawStoreManager;
     private ConfigurationManager configurationManager;
     private OlapDAO olapDAO;
+    private AshFilter ashFilter;
+    private FilteredAshLoader filteredAshLoader;
 
     private OlapCacheManager olapCacheManager;
 
@@ -115,7 +119,9 @@ public class GetFromRemoteAndStore {
                                  ChartDatasetManager chartDatasetManager,
                                  RawStoreManager rawStoreManager,
                                  ConfigurationManager configurationManager,
-                                 OlapDAO olapDAO) {
+                                 OlapDAO olapDAO,
+                                 AshFilter ashFilter,
+                                 FilteredAshLoader filteredAshLoader) {
         this.colorManager = colorManager;
         this.remoteDBManager = remoteDBManagers;
         this.storeManager = storeManager;
@@ -125,6 +131,8 @@ public class GetFromRemoteAndStore {
         this.rawStoreManager = rawStoreManager;
         this.configurationManager = configurationManager;
         this.olapDAO = olapDAO;
+        this.ashFilter = ashFilter;
+        this.filteredAshLoader = filteredAshLoader;
     }
 
     public void initConnection(ConfigProfile configProfile) throws SQLException{
@@ -194,7 +202,7 @@ public class GetFromRemoteAndStore {
         loadUserIdUsernameToLocalDB(iProfile.getSqlTextUserIdName());
     }
 
-    private void loadToMainStackedChart(){
+    private synchronized void loadToMainStackedChart(){
         long min;
         long max;
 
@@ -222,6 +230,9 @@ public class GetFromRemoteAndStore {
 
         int range = (int) (ConstantManager.CURRENT_WINDOW / ConstantManager.MAX_POINT_PER_GRAPH);
         chartDatasetManager.getMainNameChartDataset().getDatasetRDA().setLastDtVal(max);
+
+        AshFilter.Matcher filterMatcher = ashFilter.isActive()
+                ? ashFilter.matcher(configurationManager.getCurrentConfiguration().getSqlColProfileList()) : null;
 
         for (long d = min; d < max; d += range) {
 
@@ -263,6 +274,11 @@ public class GetFromRemoteAndStore {
 
             cursor.close();
 
+            // Main chart from filtered raw data
+            if (filterMatcher != null) {
+                hashMap.put(d, filteredAshLoader.countByWaitClass(filterMatcher, iProfile, d, d + range, waitClassCount));
+            }
+
             // Load to detail chart
             final double dd = d;
             final long maxmax = max;
@@ -296,6 +312,77 @@ public class GetFromRemoteAndStore {
 
         chartDatasetManager.getMainNameChartDataset().getDatasetRDA().deleteValuesFromDatasetDetail(ConstantManager.MAX_POINT_PER_GRAPH);
         chartDatasetManager.getNameChartDatasetDetail().forEach(e -> e.getDatasetRDA().deleteValuesFromDatasetDetail(ConstantManager.MAX_POINT_PER_GRAPH));
+    }
+
+    /**
+     * Recalculate the visible points of the main chart, from raw data when a filter is active
+     * or from aggregated data otherwise
+     */
+    public synchronized void refreshMainChart() {
+        if (chartDatasetManager.getMainNameChartDataset() == null) {
+            return;
+        }
+        CategoryTableXYDatasetRDA dataset = chartDatasetManager.getMainNameChartDataset().getDatasetRDA();
+        if (dataset.getSeriesCount() == 0) {
+            return;
+        }
+
+        LinkedList<String> waitClassList = new LinkedList<>(iProfile.getWaitClass().keySet());
+        int waitClassCount = waitClassList.size();
+        int range = (int) (ConstantManager.CURRENT_WINDOW / ConstantManager.MAX_POINT_PER_GRAPH);
+
+        AshFilter.Matcher filterMatcher = ashFilter.isActive()
+                ? ashFilter.matcher(configurationManager.getCurrentConfiguration().getSqlColProfileList()) : null;
+
+        List<Double> xValues = new ArrayList<>();
+        for (int i = 0; i < dataset.getItemCount(); i++) {
+            xValues.add(dataset.getX(0, i).doubleValue());
+        }
+
+        for (Double x : xValues) {
+            long d = x.longValue();
+            long[] values = filterMatcher != null
+                    ? filteredAshLoader.countByWaitClass(filterMatcher, iProfile, d, d + range, waitClassCount)
+                    : getOlapCountByWaitClass(d, d + range, waitClassList, waitClassCount);
+
+            waitClassList.forEach(k -> dataset.setSeriesValueNoNotify(x,
+                    (double) values[iProfile.getWaitClassId(k)] / (range / 1000), k));
+        }
+
+        dataset.notifyChanged();
+    }
+
+    private long[] getOlapCountByWaitClass(long begin, long end, List<String> waitClassList, int waitClassCount) {
+        long[] out = new long[waitClassCount];
+
+        EntityCursor<AshAggrMinData> cursor = this.olapDAO.getAshAggrMinDataDAO().getAshAggrEntityCursorRangeQuery(begin, end);
+        try {
+            for (AshAggrMinData sl : cursor) {
+                waitClassList.forEach(k -> out[iProfile.getWaitClassId(k)] += sl.getSumValueByWaitClassId(iProfile.getWaitClassId(k)));
+            }
+        } finally {
+            cursor.close();
+        }
+
+        return out;
+    }
+
+    /**
+     * Time range shown in the main chart: [begin, end]
+     */
+    public long[] getMainChartRange() {
+        int range = (int) (ConstantManager.CURRENT_WINDOW / ConstantManager.MAX_POINT_PER_GRAPH);
+        CategoryTableXYDatasetRDA dataset = chartDatasetManager.getMainNameChartDataset() == null
+                ? null : chartDatasetManager.getMainNameChartDataset().getDatasetRDA();
+
+        if (dataset == null || dataset.getSeriesCount() == 0 || dataset.getItemCount() == 0) {
+            long end = currServerTime == 0L ? System.currentTimeMillis() : currServerTime;
+            return new long[]{end - ConstantManager.CURRENT_WINDOW, end};
+        }
+
+        long begin = dataset.getX(0, 0).longValue();
+        long end = dataset.getX(0, dataset.getItemCount() - 1).longValue() + range;
+        return new long[]{begin, end};
     }
 
     private void generateDataUpToMinForDetail(NameChartDataset nameChartDataset, String key, long min, long dd, int range) {
