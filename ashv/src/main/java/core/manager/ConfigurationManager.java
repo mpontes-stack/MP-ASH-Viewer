@@ -86,12 +86,32 @@ public class ConfigurationManager {
        if (!profileCurr.isPresent()) {
            getCurrentConfiguration().setSqlColProfileList(profilesDb);
            loadConfigToFile(getCurrentConfiguration());
+       } else if (isAppendedOnly(profileCurr.get(), profilesDb)) {
+           log.info("ASH sql columns appended: " + profileCurr.get().size() + " -> " + profilesDb.size());
+           getCurrentConfiguration().setSqlColProfileList(profilesDb);
+           loadConfigToFile(getCurrentConfiguration());
        } else {
            if (profilesDb.size() != profileCurr.get().size()) {
                throw new SqlColMetadataException("ASH sql column metadata changes detected.. " +
                        "Create the new configuration profile!");
            }
        }
+    }
+
+    /**
+     * True when the database query only added new columns after the stored ones,
+     * so previously stored rows keep the same column positions.
+     */
+    private boolean isAppendedOnly(List<SqlColProfile> stored, List<SqlColProfile> fromDb) {
+        if (fromDb.size() <= stored.size()) {
+            return false;
+        }
+        for (int i = 0; i < stored.size(); i++) {
+            if (!stored.get(i).getColName().equalsIgnoreCase(fromDb.get(i).getColName())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public void loadConfigToFile(ConfigProfile configuration) {

@@ -137,6 +137,9 @@ public class ConvertManager {
     public Object getMatrixDataForJTable(String columnTypeCategoryId, int columnCategoryId, MainData sl, int row) {
         DatabaseDAO dao = storeManager.getDatabaseDAO();
 
+        // rows stored before new columns were appended are shorter
+        if (columnCategoryId > sl.getMainMatrix()[row].length) return Labels.getLabel("local.null");
+
         int intval = sl.getMainMatrix()[row][columnCategoryId-1];
         if (intval == intNullValue) return Labels.getLabel("local.null");
 
