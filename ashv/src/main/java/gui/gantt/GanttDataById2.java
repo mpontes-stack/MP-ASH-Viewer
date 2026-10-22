@@ -4,6 +4,8 @@ import com.egantt.model.drawing.DrawingState;
 import com.egantt.model.drawing.part.ListDrawingPart;
 import com.egantt.model.drawing.state.BasicDrawingState;
 import com.sleepycat.persist.EntityCursor;
+import core.filter.AshFilter;
+import core.filter.FilteredAshLoader;
 import core.manager.ConstantManager;
 import ext.egantt.drawing.module.BasicPainterModule;
 import ext.egantt.swing.GanttDrawingPartHelper;
@@ -54,12 +56,7 @@ public class GanttDataById2 {
     /***********  New version  ************/
     private Map<CompositeKeyCache2, List<TripleValueCache>> hashmapCache = new HashMap<>();
 
-    public void computeGanttDataFromBDB(GanttParam ganttParameter){
-        GanttParam ganttParamTo = ganttParameter;
-
-        long start0 = (long) ganttParamTo.getBeginTime();
-        long end0 = (long) ganttParamTo.getEndTime();
-
+    private void setWaitClassId(GanttParam ganttParamTo) {
         try {
             this.waitClassId = ganttParamTo.getWaitClass().isEmpty()
                     ? -1 : this.getIProfile().getWaitClassId(ganttParamTo.getWaitClass());
@@ -67,6 +64,34 @@ public class GanttDataById2 {
             e.printStackTrace();
             System.out.println(e.getMessage());
         }
+    }
+
+    /**
+     * Same as {@link #computeGanttDataFromBDB(GanttParam)} but from raw data filtered by {@link AshFilter}
+     */
+    public void computeGanttDataFromRaw(GanttParam ganttParamTo, FilteredAshLoader filteredAshLoader,
+                                        AshFilter.Matcher filterMatcher){
+        setWaitClassId(ganttParamTo);
+
+        Map<Integer, Map<Integer, Integer>> data = filteredAshLoader.countBySqlSessionAndWaitEvent(filterMatcher,
+                getIProfile(), (long) ganttParamTo.getBeginTime(), (long) ganttParamTo.getEndTime(), waitClassId);
+
+        data.forEach((paramId, waitIdSum) -> {
+            if (this.parameterGroupId == 0
+                    && this.olapDAO.getStrParameterValueById(paramId).contains(ConstantManager.NULL_VALUE)) { // SQL_ID
+                return;
+            }
+            loadAggrData(paramId, waitIdSum);
+        });
+    }
+
+    public void computeGanttDataFromBDB(GanttParam ganttParameter){
+        GanttParam ganttParamTo = ganttParameter;
+
+        long start0 = (long) ganttParamTo.getBeginTime();
+        long end0 = (long) ganttParamTo.getEndTime();
+
+        setWaitClassId(ganttParamTo);
 
         LocalDateTime dt = LocalDateTime.ofInstant(Instant.ofEpochMilli(start0), ZoneId.systemDefault());
 
@@ -108,10 +133,21 @@ public class GanttDataById2 {
     }
 
     public void loadAshRowAggrData(AshAggrMinData15Sec ashAggrMinData){
+        Map<Integer, Integer> allWaitId1 =
+                ConstantManager.zipToMap(ashAggrMinData.getWaitId(waitClassId), //mtrx[0]::waitId;
+                        ashAggrMinData.getSum(waitClassId));                    //mtrx[2]::sum;
+
+        loadAggrData(ashAggrMinData.getCompositeKey().getParamId(), allWaitId1);
+    }
+
+    /**
+     * @param paramId id of "sqlId_sessionId_serial" parameter
+     * @param allWaitId1 wait event id -> sum
+     */
+    private void loadAggrData(int paramId, Map<Integer, Integer> allWaitId1){
 
         /** !!! Refactor it !!! **/
-        int paramId = ashAggrMinData.getCompositeKey().getParamId();
-        String[] outputParam = this.olapDAO.getStrParameterValueById(ashAggrMinData.getCompositeKey().getParamId()).split("_");
+        String[] outputParam = this.olapDAO.getStrParameterValueById(paramId).split("_");
 
         if (this.parameterGroupId == 0 & !outputParam[0].equalsIgnoreCase(ConstantManager.NULL_VALUE)){
             paramId = this.olapDAO.getParameterIdByStrValue(outputParam[0]);
@@ -127,10 +163,6 @@ public class GanttDataById2 {
 
         CompositeKeyCache2 compositeKeyCache2
                 = new CompositeKeyCache2(paramId, this.parameterGroupId);
-
-        Map<Integer, Integer> allWaitId1 =
-                ConstantManager.zipToMap(ashAggrMinData.getWaitId(waitClassId), //mtrx[0]::waitId;
-                        ashAggrMinData.getSum(waitClassId));                    //mtrx[2]::sum;
 
         if (allWaitId1.size() == 0)
             return;

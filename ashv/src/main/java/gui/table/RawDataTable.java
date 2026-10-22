@@ -3,6 +3,7 @@ package gui.table;
 import com.sleepycat.je.DatabaseException;
 import core.filter.AshFilter;
 import gui.BasicFrame;
+import gui.filter.FilterPopup;
 import gui.table.searchable.DecoratorFactory;
 import gui.table.searchable.MatchingTextHighlighter;
 import gui.table.searchable.XMatchingTextHighlighter;
@@ -30,6 +31,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -40,7 +42,8 @@ public class RawDataTable extends JPanel implements IDetailPanel {
     @Getter @Setter private IProfile iProfile;
 
     @Getter @Setter private String waitClassValue = "";
-    @Getter @Setter private AshFilter ashFilter;
+    @Getter private AshFilter ashFilter;
+    private boolean isRawDataLoaded = false;
     @Getter @Setter private GanttParam ganttParamIn;
 
     private JPanel mainPanel;
@@ -87,8 +90,21 @@ public class RawDataTable extends JPanel implements IDetailPanel {
         this.add(this.mainPanel);
     }
 
+    /**
+     * Enable filters: right click menu on cells and reload of loaded data on filter change
+     */
+    public void setAshFilter(AshFilter ashFilter) {
+        this.ashFilter = ashFilter;
+        this.ashFilter.addListener(() -> {
+            if (isRawDataLoaded && ganttParamIn != null) {
+                SwingUtilities.invokeLater(() -> loadRawData((long) ganttParamIn.getBeginTime(), (long) ganttParamIn.getEndTime()));
+            }
+        });
+    }
+
     public void LoadDataToDetail(GanttParam ganttParamIn) {
         this.ganttParamIn = ganttParamIn;
+        this.isRawDataLoaded = false;
 
         // Layout of buttons
         buttonPanel.removeAll();
@@ -107,6 +123,7 @@ public class RawDataTable extends JPanel implements IDetailPanel {
     }
 
     private void loadRawData(long begin, long end) {
+        isRawDataLoaded = true;
         rawDataPanel.removeAll();
 
         JPanel panelLoading = createProgressBar("Loading, please wait...");
@@ -138,6 +155,19 @@ public class RawDataTable extends JPanel implements IDetailPanel {
                     table.setColumnControlVisible(true);
                     table.setHorizontalScrollEnabled(true);
                     table.packAll();
+
+                    if (ashFilter != null) {
+                        final JXTable t = table;
+                        FilterPopup.install(t, ashFilter, (row, col) -> {
+                            String colName = t.getColumnName(col);
+                            if (colName.equalsIgnoreCase(iProfile.getSampleTimeColName())) {
+                                return null;
+                            }
+                            Object value = t.getValueAt(row, col);
+                            return Collections.singletonList(Collections.singletonList(
+                                    FilterPopup.condition(colName, value == null ? "" : String.valueOf(value))));
+                        });
+                    }
 
                     MatchingTextHighlighter matchingTextMarker = new XMatchingTextHighlighter();
                     matchingTextMarker.setPainter(DecoratorFactory.createPlainPainter());

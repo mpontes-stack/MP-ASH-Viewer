@@ -88,6 +88,22 @@ public class OlapDAO extends QueryService {
         return this.ashParameterSecondaryIndexStrValue.get(paramStrValue).getParamId();
     }
 
+    /**
+     * @return parameter id or -1 when the value is not stored (no insert)
+     */
+    public int findParameterId(String paramStrValue){
+        AshParameter ashParameter = this.ashParameterSecondaryIndexStrValue.get(paramStrValue);
+        return ashParameter == null ? -1 : ashParameter.getParamId();
+    }
+
+    /**
+     * @return wait event id or -1 when the event is not stored (no insert)
+     */
+    public int findWaitEventId(String waitEvent){
+        AshWaitEvent ashWaitEvent = this.ashWaitEventSecondaryIndexStrValue.get(waitEvent);
+        return ashWaitEvent == null ? -1 : ashWaitEvent.getEventId();
+    }
+
     public String[] getAdditStrArrayParameters(int paramId){
         return this.ashParameterPrimaryIndex.get(paramId).getAdditionalParams();
     }

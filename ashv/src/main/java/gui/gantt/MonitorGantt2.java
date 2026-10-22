@@ -6,6 +6,8 @@ import com.egantt.swing.component.ComponentResources;
 import com.egantt.swing.component.context.BasicComponentContext;
 import com.egantt.swing.component.tooltip.ToolTipState;
 import com.egantt.swing.table.list.BasicJTableList;
+import core.filter.AshFilter;
+import core.filter.FilteredAshLoader;
 import core.manager.ColorManager;
 import core.manager.ConstantManager;
 import core.processing.GetFromRemoteAndStore;
@@ -14,6 +16,7 @@ import ext.egantt.swing.GanttTable;
 import gui.BasicFrame;
 import gui.detail.SessionDetail;
 import gui.detail.SqlDetail;
+import gui.filter.FilterPopup;
 import gui.util.ProgressBarUtil;
 import lombok.Getter;
 import lombok.Setter;
@@ -28,6 +31,11 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 @Slf4j
 public class MonitorGantt2 extends JPanel implements IDetailPanel {
@@ -54,6 +62,10 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
 
     @Getter @Setter private boolean isHistory;
 
+    @Getter private AshFilter ashFilter;
+    private FilteredAshLoader filteredAshLoader;
+    private GanttParam lastGanttParamIn;
+
     public MonitorGantt2(BasicFrame jFrame, StoreManager storeManager,
                          GetFromRemoteAndStore getFromRemoteAndStore, ColorManager colorManager) {
         this.jFrame = jFrame;
@@ -63,8 +75,22 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         this.init();
     }
 
+    /**
+     * Enable filters: data from raw data when a filter is active, reload on filter change
+     */
+    public void setAshFilter(AshFilter ashFilter) {
+        this.ashFilter = ashFilter;
+        this.filteredAshLoader = new FilteredAshLoader(storeManager, ashFilter);
+        this.ashFilter.addListener(() -> {
+            if (lastGanttParamIn != null) {
+                SwingUtilities.invokeLater(() -> LoadDataToDetail(lastGanttParamIn));
+            }
+        });
+    }
+
     @Override
     public void LoadDataToDetail(GanttParam ganttParamIn) {
+        this.lastGanttParamIn = ganttParamIn;
         ProgressBarUtil.loadProgressBar(this, this.main, "Loading, please wait...");
         Thread t = new Thread() {
             @Override
@@ -122,8 +148,15 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
 
         this.clearListOfGanttDataById();
 
-        this.ganttDataByIdSqlId.computeGanttDataFromBDB(ganttParamTo); // Sql Id data
-        this.ganttDataByIdSessionId.computeGanttDataFromBDB(ganttParamTo); // Session Id
+        if (ashFilter != null && ashFilter.isActive()) {
+            AshFilter.Matcher filterMatcher = ashFilter.matcher(
+                    storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList());
+            this.ganttDataByIdSqlId.computeGanttDataFromRaw(ganttParamTo, filteredAshLoader, filterMatcher); // Sql Id data
+            this.ganttDataByIdSessionId.computeGanttDataFromRaw(ganttParamTo, filteredAshLoader, filterMatcher); // Session Id
+        } else {
+            this.ganttDataByIdSqlId.computeGanttDataFromBDB(ganttParamTo); // Sql Id data
+            this.ganttDataByIdSessionId.computeGanttDataFromBDB(ganttParamTo); // Session Id
+        }
 
         this.addGanttTablesToJPanel();
     }
@@ -145,6 +178,13 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         tableGanttSql.getJXTable().setCellSelectionEnabled(true);
 
         setDoubleClickForColSqlId(tableGanttSql.getJXTable(), 1); // Open SQL id detail for double click event
+
+        if (ashFilter != null) {
+            JXTable t = tableGanttSql.getJXTable();
+            FilterPopup.install(t, ashFilter, (row, col) -> Collections.singletonList(Collections.singletonList(
+                    FilterPopup.condition(iProfile.getSqlIdColName(),
+                            String.valueOf(t.getModel().getValueAt(t.convertRowIndexToModel(row), 1))))));
+        }
 
         setTooltipAndPercent(tableGanttSql);
 
@@ -171,6 +211,25 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         tableGanttSessions.getJXTable().setCellSelectionEnabled(true);
 
         setDoubleClickForColSessionId(tableGanttSessions.getJXTable(), 1, 2);
+
+        if (ashFilter != null) {
+            JXTable t = tableGanttSessions.getJXTable();
+            FilterPopup.install(t, ashFilter, (row, col) -> {
+                int modelRow = t.convertRowIndexToModel(row);
+                List<List<Map.Entry<String, String>>> entries = new ArrayList<>();
+                entries.add(Arrays.asList(
+                        FilterPopup.condition(iProfile.getSessColName(), String.valueOf(t.getModel().getValueAt(modelRow, 1))),
+                        FilterPopup.condition(iProfile.getSerialColName(), String.valueOf(t.getModel().getValueAt(modelRow, 2)))));
+
+                Object program = t.getModel().getValueAt(modelRow, 4);
+                boolean hasProgramCol = storeManager.getConfigurationManager().getCurrentConfiguration()
+                        .getSqlColProfileList().stream().anyMatch(c -> c.getColName().equalsIgnoreCase("PROGRAM"));
+                if (hasProgramCol && program != null && !String.valueOf(program).isEmpty()) {
+                    entries.add(Collections.singletonList(FilterPopup.condition("PROGRAM", String.valueOf(program))));
+                }
+                return entries;
+            });
+        }
 
         setTooltipAndPercent(tableGanttSessions);
 

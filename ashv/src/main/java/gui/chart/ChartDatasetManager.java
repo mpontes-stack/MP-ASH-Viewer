@@ -64,6 +64,7 @@ public class ChartDatasetManager {
         MonitorGantt2 monitorGantt2 = new MonitorGantt2(jFrame, storeManager, getFromRemoteAndStore, colorManager);
         mainStackChartPanel.addChartListenerReleaseMouse(monitorGantt2);
         monitorGantt2.setIProfile(iProfile);
+        monitorGantt2.setAshFilter(ashFilter);
 
         RawDataTable mainRawDataTable = new RawDataTable(jFrame, storeManager);
         mainStackChartPanel.addChartListenerReleaseMouse(mainRawDataTable);
