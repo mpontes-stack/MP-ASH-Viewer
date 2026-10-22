@@ -257,8 +257,8 @@ public class GetFromRemoteAndStore {
                                 = sl.getSumValueByWaitClassId(this.getIProfile().getWaitClassId(k)) + tmp;
                     });
 
-                    // Detail
-                    waitClassList.iterator().forEachRemaining(k -> {
+                    // Detail (from filtered raw data below when a filter is active)
+                    if (filterMatcher == null) waitClassList.iterator().forEachRemaining(k -> {
                         Map<String, Integer> out = mapDetail.computeIfAbsent(k, m -> new LinkedHashMap<>());
 
                         Map<Integer, Integer> allWaitId1 =
@@ -274,9 +274,16 @@ public class GetFromRemoteAndStore {
 
             cursor.close();
 
-            // Main chart from filtered raw data
+            // Main and detail charts from filtered raw data
             if (filterMatcher != null) {
-                hashMap.put(d, filteredAshLoader.countByWaitClass(filterMatcher, iProfile, d, d + range, waitClassCount));
+                Map<String, Map<String, Integer>> byClassEvent =
+                        filteredAshLoader.countByWaitClassAndEvent(filterMatcher, iProfile, d, d + range);
+                hashMap.put(d, FilteredAshLoader.toWaitClassArray(byClassEvent, iProfile, waitClassCount));
+
+                waitClassList.forEach(k -> {
+                    Map<String, Integer> out = mapDetail.computeIfAbsent(k, m -> new LinkedHashMap<>());
+                    byClassEvent.getOrDefault(k, new HashMap<>()).forEach((event, sum) -> out.merge(event, sum, Integer::sum));
+                });
             }
 
             // Load to detail chart
@@ -334,31 +341,55 @@ public class GetFromRemoteAndStore {
         AshFilter.Matcher filterMatcher = ashFilter.isActive()
                 ? ashFilter.matcher(configurationManager.getCurrentConfiguration().getSqlColProfileList()) : null;
 
+        // Samples by wait class and event for each point of the charts
+        Map<Double, Map<String, Map<String, Integer>>> byPoint = new HashMap<>();
+        java.util.function.Function<Double, Map<String, Map<String, Integer>>> compute = x -> filterMatcher != null
+                ? filteredAshLoader.countByWaitClassAndEvent(filterMatcher, iProfile, x.longValue(), x.longValue() + range)
+                : getOlapCountByWaitClassAndEvent(x.longValue(), x.longValue() + range, waitClassList);
+
+        // Main
+        for (Double x : getXValues(dataset)) {
+            long[] values = FilteredAshLoader.toWaitClassArray(byPoint.computeIfAbsent(x, compute), iProfile, waitClassCount);
+            waitClassList.forEach(k -> dataset.setSeriesValueNoNotify(x,
+                    (double) values[iProfile.getWaitClassId(k)] / (range / 1000), k));
+        }
+        dataset.notifyChanged();
+
+        // Detail
+        chartDatasetManager.getNameChartDatasetDetail().forEach(e -> {
+            CategoryTableXYDatasetRDA detail = e.getDatasetRDA();
+            if (detail.getSeriesCount() == 0) {
+                return;
+            }
+            for (Double x : getXValues(detail)) {
+                Map<String, Integer> byEvent = byPoint.computeIfAbsent(x, compute).getOrDefault(e.getName(), new HashMap<>());
+                detail.getSeriesNames().values().forEach(ev ->
+                        detail.setSeriesValueNoNotify(x, (double) byEvent.getOrDefault(ev, 0) / (range / 1000), ev));
+            }
+            detail.notifyChanged();
+        });
+    }
+
+    private static List<Double> getXValues(CategoryTableXYDatasetRDA dataset) {
         List<Double> xValues = new ArrayList<>();
         for (int i = 0; i < dataset.getItemCount(); i++) {
             xValues.add(dataset.getX(0, i).doubleValue());
         }
-
-        for (Double x : xValues) {
-            long d = x.longValue();
-            long[] values = filterMatcher != null
-                    ? filteredAshLoader.countByWaitClass(filterMatcher, iProfile, d, d + range, waitClassCount)
-                    : getOlapCountByWaitClass(d, d + range, waitClassList, waitClassCount);
-
-            waitClassList.forEach(k -> dataset.setSeriesValueNoNotify(x,
-                    (double) values[iProfile.getWaitClassId(k)] / (range / 1000), k));
-        }
-
-        dataset.notifyChanged();
+        return xValues;
     }
 
-    private long[] getOlapCountByWaitClass(long begin, long end, List<String> waitClassList, int waitClassCount) {
-        long[] out = new long[waitClassCount];
+    private Map<String, Map<String, Integer>> getOlapCountByWaitClassAndEvent(long begin, long end, List<String> waitClassList) {
+        Map<String, Map<String, Integer>> out = new HashMap<>();
 
         EntityCursor<AshAggrMinData> cursor = this.olapDAO.getAshAggrMinDataDAO().getAshAggrEntityCursorRangeQuery(begin, end);
         try {
             for (AshAggrMinData sl : cursor) {
-                waitClassList.forEach(k -> out[iProfile.getWaitClassId(k)] += sl.getSumValueByWaitClassId(iProfile.getWaitClassId(k)));
+                waitClassList.forEach(k -> {
+                    Map<Integer, Integer> allWaitId1 =
+                            ConstantManager.zipToMap(sl.getWaitId(iProfile.getWaitClassId(k)), sl.getSum(iProfile.getWaitClassId(k)));
+                    allWaitId1.forEach((eventId, sum) -> out.computeIfAbsent(k, m -> new HashMap<>())
+                            .merge(olapDAO.getEventStrValueForWaitEventId(eventId), sum, Integer::sum));
+                });
             }
         } finally {
             cursor.close();

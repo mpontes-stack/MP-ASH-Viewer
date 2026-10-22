@@ -79,9 +79,16 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
      * Enable filters: data from raw data when a filter is active, reload on filter change
      */
     public void setAshFilter(AshFilter ashFilter) {
+        setAshFilter(ashFilter, true);
+    }
+
+    /**
+     * @param reloadOnChange false for short-lived panels reloaded by their owner
+     */
+    public void setAshFilter(AshFilter ashFilter, boolean reloadOnChange) {
         this.ashFilter = ashFilter;
         this.filteredAshLoader = new FilteredAshLoader(storeManager, ashFilter);
-        this.ashFilter.addListener(() -> {
+        if (reloadOnChange) this.ashFilter.addListener(() -> {
             if (lastGanttParamIn != null) {
                 SwingUtilities.invokeLater(() -> LoadDataToDetail(lastGanttParamIn));
             }

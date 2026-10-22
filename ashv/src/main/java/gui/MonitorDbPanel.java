@@ -5,6 +5,7 @@ import com.github.lgooddatepicker.components.DateTimePicker;
 import com.github.lgooddatepicker.components.TimePickerSettings;
 import config.Labels;
 import core.filter.AshFilter;
+import core.filter.FilterPresets;
 import core.filter.FilteredAshLoader;
 import core.manager.ColorManager;
 import core.manager.ConstantManager;
@@ -50,6 +51,7 @@ public class MonitorDbPanel {
     private MainTabbedPane mainTabbedPane;
     private AshFilter ashFilter;
     private FilteredAshLoader filteredAshLoader;
+    private FilterPresets filterPresets;
 
     private JSplitPane topActivitySplitPane;
     private JSplitPane detailSplitPane;
@@ -74,7 +76,8 @@ public class MonitorDbPanel {
                           @Named("mainTabPane") MainTabbedPane mainTabbedPane,
                           ChartDatasetManager chartDatasetManager,
                           AshFilter ashFilter,
-                          FilteredAshLoader filteredAshLoader) {
+                          FilteredAshLoader filteredAshLoader,
+                          FilterPresets filterPresets) {
         this.jFrame = jFrame;
         this.colorManager = colorManager;
         this.storeManager = storeManager;
@@ -83,6 +86,7 @@ public class MonitorDbPanel {
         this.chartDatasetManager = chartDatasetManager;
         this.ashFilter = ashFilter;
         this.filteredAshLoader = filteredAshLoader;
+        this.filterPresets = filterPresets;
 
         this.ashFilter.addListener(() -> ProgressBarUtil.runProgressDialog(
                 getFromRemoteAndStore::refreshMainChart, jFrame, Labels.getLabel("gui.filter.applying")));
@@ -110,8 +114,7 @@ public class MonitorDbPanel {
         mainGanttAndRaw.add("Raw data", chartDatasetManager.getMainNameChartDataset().getRawDataTable());
         mainGanttAndRaw.add("ASH Report", chartDatasetManager.getMainNameChartDataset().getAshReport());
 
-        FilterBar filterBar = new FilterBar(ashFilter, filteredAshLoader, storeManager,
-                getFromRemoteAndStore::getMainChartRange);
+        FilterBar filterBar = newFilterBar(getFromRemoteAndStore::getMainChartRange);
         JPanel topActivityChartPanel = new JPanel(new BorderLayout());
         topActivityChartPanel.add(filterBar, BorderLayout.NORTH);
         topActivityChartPanel.add(chartDatasetManager.getMainNameChartDataset().getStackChartPanel(), BorderLayout.CENTER);
@@ -133,6 +136,17 @@ public class MonitorDbPanel {
 
     public void addGuiHistory(){
         mainTabbedPane.add("History", controlMainDetailHistory);
+    }
+
+    private FilterBar newFilterBar(java.util.function.Supplier<long[]> rangeSupplier) {
+        return new FilterBar(ashFilter, filteredAshLoader, filterPresets, storeManager, rangeSupplier);
+    }
+
+    private long[] getHistoryRange() {
+        GanttParam ganttParam = historyPanel == null ? null : historyPanel.getLastGanttParam();
+        return ganttParam == null
+                ? getFromRemoteAndStore.getMainChartRange()
+                : new long[]{(long) ganttParam.getBeginTime(), (long) ganttParam.getEndTime()};
     }
 
     private void initializeChartDataset(){
@@ -172,6 +186,8 @@ public class MonitorDbPanel {
         monitorGantt20 = new MonitorGantt2(jFrame, storeManager, getFromRemoteAndStore, colorManager);
         monitorGantt20.setHistory(false);
         rawDataTable20 = new RawDataTable(jFrame, storeManager);
+        monitorGantt20.setAshFilter(ashFilter);
+        rawDataTable20.setAshFilter(ashFilter);
 
         detailGanttAndRaw = new JTabbedPane();
 
@@ -226,7 +242,11 @@ public class MonitorDbPanel {
             });
             mapRadioButton.entrySet().stream().findFirst().get().getValue().doClick();
 
-            controlStackedChartInner.add(buttonPanel, BorderLayout.NORTH);
+            JPanel detailNorthPanel = new JPanel(new BorderLayout());
+            detailNorthPanel.add(newFilterBar(getFromRemoteAndStore::getMainChartRange), BorderLayout.NORTH);
+            detailNorthPanel.add(buttonPanel, BorderLayout.CENTER);
+
+            controlStackedChartInner.add(detailNorthPanel, BorderLayout.NORTH);
             controlStackedChartInner.add(jPanelStackedCharts, BorderLayout.CENTER);
 
             detailSplitPane.add(controlStackedChartInner, JSplitPane.TOP);
@@ -245,6 +265,7 @@ public class MonitorDbPanel {
         JPanel startEndDateTimePicker = new JPanel(lm1);
 
         historyPanel = new HistoryPanel(jFrame, colorManager, storeManager, getFromRemoteAndStore, chartDatasetManager);
+        historyPanel.setAshFilter(ashFilter, filteredAshLoader);
 
         Map<String, JRadioButton> mapRadioButton = new LinkedHashMap<>();
 
@@ -359,7 +380,11 @@ public class MonitorDbPanel {
 
         mainStartEndDateTimePicker.add(startEndDateTimePicker, "span 2, wmin 100");
 
-        controlMainDetailHistory.add(mainStartEndDateTimePicker/*buttonPanel*/, BorderLayout.NORTH);
+        JPanel historyNorthPanel = new JPanel(new BorderLayout());
+        historyNorthPanel.add(mainStartEndDateTimePicker/*buttonPanel*/, BorderLayout.NORTH);
+        historyNorthPanel.add(newFilterBar(this::getHistoryRange), BorderLayout.SOUTH);
+
+        controlMainDetailHistory.add(historyNorthPanel, BorderLayout.NORTH);
         controlMainDetailHistory.add(historyPanel, BorderLayout.CENTER);
 
         controlMainDetailHistory.revalidate();

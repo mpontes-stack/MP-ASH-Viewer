@@ -4,14 +4,21 @@ import com.sleepycat.persist.EntityCursor;
 import config.Labels;
 import config.profile.SqlColProfile;
 import core.manager.ConstantManager;
+import gui.chart.CategoryTableXYDatasetRDA;
+import gui.chart.panel.NameChartDataset;
+import gui.chart.panel.StackChartPanel;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeSet;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
+import org.jfree.chart.util.GanttParam;
 import profile.IProfile;
 import store.StoreManager;
 import store.entity.database.MainData;
@@ -35,47 +42,6 @@ public class FilteredAshLoader {
     private List<SqlColProfile> getColProfiles() {
         List<SqlColProfile> cols = storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList();
         return cols == null ? Collections.emptyList() : cols;
-    }
-
-    /**
-     * Number of filtered samples by wait class id in [begin, end)
-     */
-    public long[] countByWaitClass(AshFilter.Matcher matcher, IProfile iProfile,
-                                   long begin, long end, int waitClassCount) {
-        long[] out = new long[waitClassCount];
-
-        Optional<SqlColProfile> waitClassCol = getColProfiles().stream()
-                .filter(c -> c.getColName().equalsIgnoreCase(iProfile.getWaitClassColName())).findFirst();
-        if (!waitClassCol.isPresent()) {
-            return out;
-        }
-
-        String cpuLabel = iProfile.getWaitClass((byte) 0);
-        String nullLabel = Labels.getLabel("local.null");
-
-        EntityCursor<MainData> cursor = storeManager.getDatabaseDAO().getMainDataDAO().getPrimaryIndex()
-                .entities(begin, true, end, false);
-        try {
-            for (MainData sl : cursor) {
-                for (int row = 0; row < sl.getMainMatrix().length; row++) {
-                    if (!matcher.matches(sl, row)) {
-                        continue;
-                    }
-                    String waitClass = matcher.getValue(waitClassCol.get(), sl, row);
-                    if (waitClass == null || waitClass.isEmpty() || waitClass.equals(nullLabel)) {
-                        waitClass = cpuLabel;
-                    }
-                    int id = iProfile.getWaitClassId(waitClass);
-                    if (id >= 0 && id < waitClassCount) {
-                        out[id]++;
-                    }
-                }
-            }
-        } finally {
-            cursor.close();
-        }
-
-        return out;
     }
 
     /**
@@ -142,6 +108,121 @@ public class FilteredAshLoader {
             log.info("Raw rows without aggregated parameter: " + notFound);
         }
 
+        return out;
+    }
+
+    /**
+     * Filtered samples in [begin, end) by wait class name -> (event name -> number of samples)
+     */
+    public Map<String, Map<String, Integer>> countByWaitClassAndEvent(AshFilter.Matcher matcher, IProfile iProfile,
+                                                                      long begin, long end) {
+        Map<Long, Map<String, Map<String, Integer>>> out = countByBucket(matcher, iProfile, begin, end, end - begin);
+        return out.getOrDefault(begin, new HashMap<>());
+    }
+
+    /**
+     * Filtered samples in [begin, end) grouped in buckets of {@code range} ms starting at {@code begin}:
+     * bucket start -> wait class name -> (event name -> number of samples)
+     */
+    public Map<Long, Map<String, Map<String, Integer>>> countByBucket(AshFilter.Matcher matcher, IProfile iProfile,
+                                                                      long begin, long end, long range) {
+        Map<Long, Map<String, Map<String, Integer>>> out = new HashMap<>();
+
+        List<SqlColProfile> cols = getColProfiles();
+        Optional<SqlColProfile> eventCol = findCol(cols, iProfile.getEventColName());
+        Optional<SqlColProfile> waitClassCol = findCol(cols, iProfile.getWaitClassColName());
+        if (!eventCol.isPresent() || !waitClassCol.isPresent() || range <= 0) {
+            return out;
+        }
+
+        String cpuLabel = iProfile.getWaitClass((byte) 0);
+
+        EntityCursor<MainData> cursor = storeManager.getDatabaseDAO().getMainDataDAO().getPrimaryIndex()
+                .entities(begin, true, end, false);
+        try {
+            for (MainData sl : cursor) {
+                long bucket = begin + ((sl.getKey() - begin) / range) * range;
+                for (int row = 0; row < sl.getMainMatrix().length; row++) {
+                    if (!matcher.matches(sl, row)) {
+                        continue;
+                    }
+                    String waitClass = emptyTo(matcher.getValue(waitClassCol.get(), sl, row), cpuLabel);
+                    String event = emptyTo(matcher.getValue(eventCol.get(), sl, row), cpuLabel);
+
+                    out.computeIfAbsent(bucket, k -> new HashMap<>())
+                            .computeIfAbsent(waitClass, k -> new HashMap<>())
+                            .merge(event, 1, Integer::sum);
+                }
+            }
+        } finally {
+            cursor.close();
+        }
+
+        return out;
+    }
+
+    /**
+     * History "Top activity" chart from filtered raw data (same buckets as OlapDAO#loadDataToCategoryTableXYDatasetRTVHistoryTA)
+     */
+    public void loadHistoryTA(AshFilter.Matcher matcher, IProfile iProfile, GanttParam ganttParam,
+                              CategoryTableXYDatasetRDA dataset, StackChartPanel stackChartPanel) {
+        long start = (long) ganttParam.getBeginTime();
+        long end = (long) ganttParam.getEndTime();
+        double range = (end - start) / ConstantManager.MAX_POINT_PER_GRAPH;
+        long step = Math.max(1, Math.round(range));
+
+        Map<Long, Map<String, Map<String, Integer>>> buckets = countByBucket(matcher, iProfile, start, end + step, step);
+
+        LinkedHashSet<String> waitClasses = iProfile.getUniqueTreeEventListByWaitClass();
+        waitClasses.forEach(w -> stackChartPanel.getStackedChart().setSeriesPaintDynamicDetail(w));
+
+        for (long d = start; d <= end; d += step) {
+            Map<String, Map<String, Integer>> byClass = buckets.getOrDefault(d, Collections.emptyMap());
+            for (String w : waitClasses) {
+                int sum = byClass.getOrDefault(w, Collections.emptyMap()).values().stream().mapToInt(Integer::intValue).sum();
+                dataset.addSeriesValue(d, sum / (range / 1000), w);
+            }
+        }
+    }
+
+    /**
+     * History "Detail" charts (one per wait class, series by event) from filtered raw data
+     */
+    public void loadHistoryDetail(AshFilter.Matcher matcher, IProfile iProfile, GanttParam ganttParam,
+                                  Set<NameChartDataset> nameChartDatasetList) {
+        long start = (long) ganttParam.getBeginTime();
+        long end = (long) ganttParam.getEndTime();
+        double range = (end - start) / ConstantManager.MAX_POINT_PER_GRAPH;
+        long step = Math.max(1, Math.round(range));
+
+        Map<Long, Map<String, Map<String, Integer>>> buckets = countByBucket(matcher, iProfile, start, end + step, step);
+
+        for (NameChartDataset e : nameChartDatasetList) {
+            Set<String> events = new TreeSet<>();
+            buckets.values().forEach(byClass -> events.addAll(byClass.getOrDefault(e.getName(), Collections.emptyMap()).keySet()));
+            events.forEach(ev -> e.getStackChartPanel().getStackedChart().setSeriesPaintDynamicDetail(ev));
+
+            for (long d = start; d <= end; d += step) {
+                Map<String, Integer> byEvent = buckets.getOrDefault(d, Collections.emptyMap())
+                        .getOrDefault(e.getName(), Collections.emptyMap());
+                for (String ev : events) {
+                    e.getDatasetRDA().addSeriesValue(d, byEvent.getOrDefault(ev, 0) / (range / 1000), ev);
+                }
+            }
+        }
+    }
+
+    /**
+     * Sum of samples by wait class id from {@link #countByWaitClassAndEvent}
+     */
+    public static long[] toWaitClassArray(Map<String, Map<String, Integer>> byClassEvent, IProfile iProfile, int waitClassCount) {
+        long[] out = new long[waitClassCount];
+        byClassEvent.forEach((waitClass, events) -> {
+            int id = iProfile.getWaitClassId(waitClass);
+            if (id >= 0 && id < waitClassCount) {
+                out[id] += events.values().stream().mapToInt(Integer::intValue).sum();
+            }
+        });
         return out;
     }
 

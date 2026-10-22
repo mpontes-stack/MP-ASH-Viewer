@@ -94,8 +94,15 @@ public class RawDataTable extends JPanel implements IDetailPanel {
      * Enable filters: right click menu on cells and reload of loaded data on filter change
      */
     public void setAshFilter(AshFilter ashFilter) {
+        setAshFilter(ashFilter, true);
+    }
+
+    /**
+     * @param reloadOnChange false for short-lived panels reloaded by their owner
+     */
+    public void setAshFilter(AshFilter ashFilter, boolean reloadOnChange) {
         this.ashFilter = ashFilter;
-        this.ashFilter.addListener(() -> {
+        if (reloadOnChange) this.ashFilter.addListener(() -> {
             if (isRawDataLoaded && ganttParamIn != null) {
                 SwingUtilities.invokeLater(() -> loadRawData((long) ganttParamIn.getBeginTime(), (long) ganttParamIn.getEndTime()));
             }

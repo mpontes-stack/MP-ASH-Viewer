@@ -3,17 +3,23 @@ package gui.filter;
 import config.Labels;
 import config.profile.SqlColProfile;
 import core.filter.AshFilter;
+import core.filter.FilterPresets;
 import core.filter.FilteredAshLoader;
 import java.awt.FlowLayout;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import store.StoreManager;
@@ -34,6 +40,7 @@ public class FilterBar extends JPanel {
 
     private final AshFilter ashFilter;
     private final FilteredAshLoader filteredAshLoader;
+    private final FilterPresets filterPresets;
     private final StoreManager storeManager;
     private final Supplier<long[]> rangeSupplier;
 
@@ -41,12 +48,15 @@ public class FilterBar extends JPanel {
     private final JLabel noFilterLbl = new JLabel(Labels.getLabel("gui.filter.none"));
     private final JButton addButton = new JButton(Labels.getLabel("gui.filter.add"));
     private final JButton clearButton = new JButton(Labels.getLabel("gui.filter.clear"));
+    private final JButton saveButton = new JButton(Labels.getLabel("gui.filter.preset.save"));
+    private final JButton presetsButton = new JButton(Labels.getLabel("gui.filter.preset.list") + " \u25BE");
 
-    public FilterBar(AshFilter ashFilter, FilteredAshLoader filteredAshLoader,
+    public FilterBar(AshFilter ashFilter, FilteredAshLoader filteredAshLoader, FilterPresets filterPresets,
                      StoreManager storeManager, Supplier<long[]> rangeSupplier) {
         super(new FlowLayout(FlowLayout.LEFT, 6, 3));
         this.ashFilter = ashFilter;
         this.filteredAshLoader = filteredAshLoader;
+        this.filterPresets = filterPresets;
         this.storeManager = storeManager;
         this.rangeSupplier = rangeSupplier;
 
@@ -54,6 +64,10 @@ public class FilterBar extends JPanel {
         addButton.setToolTipText(Labels.getLabel("gui.filter.add.tooltip"));
         addButton.addActionListener(e -> openAddDialog());
         clearButton.addActionListener(e -> ashFilter.clear());
+        saveButton.setToolTipText(Labels.getLabel("gui.filter.preset.save.tooltip"));
+        saveButton.addActionListener(e -> savePreset());
+        presetsButton.setToolTipText(Labels.getLabel("gui.filter.preset.list.tooltip"));
+        presetsButton.addActionListener(e -> showPresets());
 
         ashFilter.addListener(() -> SwingUtilities.invokeLater(this::rebuild));
         rebuild();
@@ -86,6 +100,9 @@ public class FilterBar extends JPanel {
         add(addButton);
         clearButton.setVisible(!conditions.isEmpty());
         add(clearButton);
+        saveButton.setVisible(!conditions.isEmpty());
+        add(saveButton);
+        add(presetsButton);
 
         revalidate();
         repaint();
@@ -98,6 +115,87 @@ public class FilterBar extends JPanel {
         }
         new AddFilterDialog(SwingUtilities.getWindowAncestor(this), ashFilter, filteredAshLoader,
                 columns, rangeSupplier).setVisible(true);
+    }
+
+    private void savePreset() {
+        Map<String, Set<String>> conditions = ashFilter.getConditions();
+        if (conditions.isEmpty()) {
+            return;
+        }
+        String name = JOptionPane.showInputDialog(this, Labels.getLabel("gui.filter.preset.name"),
+                Labels.getLabel("gui.filter.preset.save"), JOptionPane.PLAIN_MESSAGE);
+        if (name == null || name.trim().isEmpty()) {
+            return;
+        }
+        name = name.trim();
+        if (filterPresets.contains(name)
+                && JOptionPane.showConfirmDialog(this, Labels.getLabel("gui.filter.preset.overwrite") + " " + name + "?",
+                Labels.getLabel("gui.filter.preset.save"), JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+        filterPresets.save(name, conditions);
+    }
+
+    private void showPresets() {
+        JPopupMenu menu = new JPopupMenu();
+        Map<String, Map<String, Set<String>>> all = filterPresets.getAll();
+
+        if (all.isEmpty()) {
+            JMenuItem empty = new JMenuItem(Labels.getLabel("gui.filter.preset.empty"));
+            empty.setEnabled(false);
+            menu.add(empty);
+        }
+
+        all.forEach((name, conditions) -> {
+            JMenuItem item = new JMenuItem(name);
+            item.setToolTipText(describe(conditions));
+            item.addActionListener(e -> applyPreset(conditions));
+            menu.add(item);
+        });
+
+        if (!all.isEmpty()) {
+            menu.addSeparator();
+            JMenu deleteMenu = new JMenu(Labels.getLabel("gui.filter.preset.delete"));
+            all.keySet().forEach(name -> {
+                JMenuItem item = new JMenuItem(name);
+                item.addActionListener(e -> {
+                    if (JOptionPane.showConfirmDialog(this, Labels.getLabel("gui.filter.preset.delete.confirm") + " " + name + "?",
+                            Labels.getLabel("gui.filter.preset.delete"), JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
+                        filterPresets.delete(name);
+                    }
+                });
+                deleteMenu.add(item);
+            });
+            menu.add(deleteMenu);
+        }
+
+        menu.show(presetsButton, 0, presetsButton.getHeight());
+    }
+
+    private void applyPreset(Map<String, Set<String>> conditions) {
+        List<String> columns = getFilterColumns();
+        Map<String, Set<String>> available = new LinkedHashMap<>();
+        List<String> missing = new ArrayList<>();
+        conditions.forEach((col, values) -> {
+            if (columns.contains(col)) {
+                available.put(col, values);
+            } else {
+                missing.add(col);
+            }
+        });
+
+        if (!missing.isEmpty()) {
+            JOptionPane.showMessageDialog(this, Labels.getLabel("gui.filter.preset.missing") + " " + String.join(", ", missing));
+        }
+        if (!available.isEmpty()) {
+            ashFilter.replaceAll(available);
+        }
+    }
+
+    private static String describe(Map<String, Set<String>> conditions) {
+        return conditions.entrySet().stream()
+                .map(c -> c.getKey() + " = " + c.getValue().stream().map(FilterBar::displayValue).collect(Collectors.joining(", ")))
+                .collect(Collectors.joining("; "));
     }
 
     private List<String> getFilterColumns() {

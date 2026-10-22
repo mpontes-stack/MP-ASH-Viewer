@@ -1,6 +1,8 @@
 package gui;
 
 import config.Labels;
+import core.filter.AshFilter;
+import core.filter.FilteredAshLoader;
 import core.manager.ColorManager;
 import core.processing.GetFromRemoteAndStore;
 import gui.chart.CategoryTableXYDatasetRDA;
@@ -21,6 +23,7 @@ import store.StoreManager;
 import javax.swing.*;
 import javax.swing.border.EtchedBorder;
 import java.awt.*;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.ItemEvent;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -41,6 +44,11 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
     private StackChartPanel mainStackChartPanel;
 
     @Getter @Setter private IProfile iProfile;
+
+    private AshFilter ashFilter;
+    private FilteredAshLoader filteredAshLoader;
+    @Getter private GanttParam lastGanttParam;
+    private boolean isReloadNeeded = false;
 
     public HistoryPanel(BasicFrame jFrame,
                         ColorManager colorManager,
@@ -65,7 +73,54 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
     }
 
     public void initializeGui(GanttParam ganttParam){
+        this.lastGanttParam = ganttParam;
         this.addPreviewChart(ganttParam);
+    }
+
+    /**
+     * Enable filters; history is reloaded on filter change when visible (or when it becomes visible)
+     */
+    public void setAshFilter(AshFilter ashFilter, FilteredAshLoader filteredAshLoader) {
+        this.ashFilter = ashFilter;
+        this.filteredAshLoader = filteredAshLoader;
+
+        this.ashFilter.addListener(() -> SwingUtilities.invokeLater(() -> {
+            if (lastGanttParam == null) {
+                return;
+            }
+            if (isShowing()) {
+                reload();
+            } else {
+                isReloadNeeded = true;
+            }
+        }));
+
+        this.addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing() && isReloadNeeded) {
+                SwingUtilities.invokeLater(this::reload);
+            }
+        });
+    }
+
+    private void reload() {
+        isReloadNeeded = false;
+        ProgressBarUtil.runProgressDialog(() -> initializeGui(lastGanttParam), jFrame,
+                Labels.getLabel("gui.filter.applying"));
+    }
+
+    private AshFilter.Matcher getFilterMatcher() {
+        return ashFilter != null && ashFilter.isActive()
+                ? ashFilter.matcher(storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList())
+                : null;
+    }
+
+    private void loadHistoryTA(GanttParam ganttParam, CategoryTableXYDatasetRDA dataset, StackChartPanel stackChartPanel) {
+        AshFilter.Matcher filterMatcher = getFilterMatcher();
+        if (filterMatcher != null) {
+            filteredAshLoader.loadHistoryTA(filterMatcher, iProfile, ganttParam, dataset, stackChartPanel);
+        } else {
+            this.storeManager.getOlapDAO().loadDataToCategoryTableXYDatasetRTVHistoryTA(ganttParam, dataset, stackChartPanel);
+        }
     }
 
     private void addPreviewChart(GanttParam ganttParam){
@@ -87,8 +142,7 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
 
         mainStackChartPanel.addChartListenerReleaseMouse(this);
 
-        this.storeManager
-                .getOlapDAO().loadDataToCategoryTableXYDatasetRTVHistoryTA(ganttParam, mainXyDatasetRDA, mainStackChartPanel);
+        loadHistoryTA(ganttParam, mainXyDatasetRDA, mainStackChartPanel);
 
         mainSplitPane = new JSplitPane();
         mainSplitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
@@ -123,14 +177,18 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
         RawDataTable rawDataTable20 = new RawDataTable(jFrame, storeManager);
         rawDataTable20.setIProfile(iProfile);
 
+        if (ashFilter != null) {
+            monitorGantt20.setAshFilter(ashFilter, false);
+            rawDataTable20.setAshFilter(ashFilter, false);
+        }
+
         historyGanttAndRaw.add("Top sql & sessions", monitorGantt20);
         historyGanttAndRaw.add("Raw data", rawDataTable20);
 
         mainStackChartPanelTA.addChartListenerReleaseMouse(monitorGantt20);
         mainStackChartPanelTA.addChartListenerReleaseMouse(rawDataTable20);
 
-        this.storeManager
-                .getOlapDAO().loadDataToCategoryTableXYDatasetRTVHistoryTA(ganttParam, mainXyDatasetRDA, mainStackChartPanelTA);
+        loadHistoryTA(ganttParam, mainXyDatasetRDA, mainStackChartPanelTA);
 
         topASplitPane.add(mainStackChartPanelTA.getStackedChart().getChartPanel(), JSplitPane.TOP);
         topASplitPane.add(historyGanttAndRaw, JSplitPane.BOTTOM);
@@ -167,6 +225,11 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
         RawDataTable rawDataTableInner20 = new RawDataTable(jFrame, storeManager);
         rawDataTableInner20.setIProfile(iProfile);
 
+        if (ashFilter != null) {
+            monitorGantt20.setAshFilter(ashFilter, false);
+            rawDataTableInner20.setAshFilter(ashFilter, false);
+        }
+
         mainGanttAndRaw.add("Top sql & sessions", monitorGantt20);
         mainGanttAndRaw.add("Raw data", rawDataTableInner20);
 
@@ -188,8 +251,13 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
             nameChartDatasetDetail.add(nameChartDataset);
         });
 
-        this.storeManager.getOlapDAO()
-                .loadDataToCategoryTableXYDatasetRTVHistoryDetail(ganttParam, nameChartDatasetDetail);
+        AshFilter.Matcher filterMatcher = getFilterMatcher();
+        if (filterMatcher != null) {
+            filteredAshLoader.loadHistoryDetail(filterMatcher, iProfile, ganttParam, nameChartDatasetDetail);
+        } else {
+            this.storeManager.getOlapDAO()
+                    .loadDataToCategoryTableXYDatasetRTVHistoryDetail(ganttParam, nameChartDatasetDetail);
+        }
 
         nameChartDatasetDetail.stream().forEach(e -> {
             String strChartPanel = "cell 0 0, hidemode 3";

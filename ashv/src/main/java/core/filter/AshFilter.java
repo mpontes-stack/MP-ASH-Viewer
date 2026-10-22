@@ -56,6 +56,21 @@ public class AshFilter {
         fireChanged();
     }
 
+    /**
+     * Replace all conditions at once (single change notification)
+     */
+    public void replaceAll(Map<String, ? extends Set<String>> newConditions) {
+        synchronized (this) {
+            conditions.clear();
+            newConditions.forEach((k, v) -> {
+                if (v != null && !v.isEmpty()) {
+                    conditions.put(k, new LinkedHashSet<>(v));
+                }
+            });
+        }
+        fireChanged();
+    }
+
     public void removeCondition(String colName) {
         synchronized (this) {
             conditions.remove(colName);
