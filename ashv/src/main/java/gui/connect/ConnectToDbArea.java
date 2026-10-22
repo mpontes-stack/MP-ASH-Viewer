@@ -1,5 +1,6 @@
 package gui.connect;
 
+import com.formdev.flatlaf.FlatLaf;
 import com.github.windpapi4j.WinDPAPI;
 import config.GUIConfig;
 import config.Labels;
@@ -20,6 +21,7 @@ import gui.model.EncryptionType;
 import gui.util.ProgressBarUtil;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.awt.event.ItemEvent;
@@ -45,6 +47,7 @@ import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
@@ -104,8 +107,9 @@ public class ConnectToDbArea extends JDialog {
 
     private ListSelectionModel listSelectionModelForConn;
 
-    static final Color LABEL_COLOR = new Color(0, 70, 213);
+    static final Color LABEL_COLOR = FlatLaf.isLafDark() ? new Color(88, 157, 246) : new Color(0, 70, 213);
     private JScrollPane tableDataPaneConn;
+    private JSplitPane connJSplitPane;
 
     private JLabel separatorConnLbl = new JLabel(Labels.getLabel("gui.connection.connection"));
     private JLabel separatorProfileLbl = new JLabel(Labels.getLabel("gui.connection.profile"));
@@ -171,7 +175,7 @@ public class ConnectToDbArea extends JDialog {
                            ChartDatasetManager chartDatasetManager,
                            @Named("startStopButton") JButton startStopButton,
                            @Named("mainTabPane") MainTabbedPane mainTabbedPane){
-        MigLayout migLayout = new MigLayout("fillx", "1[]1", "");
+        MigLayout migLayout = new MigLayout("fill", "1[grow]1", "1[grow]1");
         this.setLayout(migLayout);
 
         this.jFrame = jFrame;
@@ -189,7 +193,7 @@ public class ConnectToDbArea extends JDialog {
     }
 
     private void init(){
-        MigLayout lmMain = new MigLayout("", "[grow][][grow]", "[][][]");
+        MigLayout lmMain = new MigLayout("fill", "[grow]", "[][grow]");
         MigLayout lmConnMain = new MigLayout("ins 10", "[para]0[grow][150lp, fill][60lp][95lp, fill]", "");
         MigLayout lmConnOther = new MigLayout("ins 10", "[para]0[grow][250lp, fill][60lp][95lp, fill]", "");
         MigLayout lmButtonPanel = new MigLayout("fillx", "[50lp][50lp][50lp][50lp]");
@@ -202,7 +206,7 @@ public class ConnectToDbArea extends JDialog {
 
         this.init_gui();
 
-        this.add(mainJPanel);
+        this.add(mainJPanel, "grow");
 
         this.setTitle(Labels.getLabel("gui.connection.label"));
         this.setSize(width,height);
@@ -260,6 +264,7 @@ public class ConnectToDbArea extends JDialog {
         tableDataPaneConn.getViewport().setScrollMode(JViewport.SIMPLE_SCROLL_MODE);
         tableDataPaneConn.setViewportView(tableConn);
         tableDataPaneConn.setVerticalScrollBar(tableDataPaneConn.getVerticalScrollBar());
+        tableDataPaneConn.setMinimumSize(new Dimension(100, 0));
 
         /******/
         separatorConnLbl.setForeground(LABEL_COLOR);
@@ -514,8 +519,10 @@ public class ConnectToDbArea extends JDialog {
                     jButtonSaveConfig.setEnabled(false);
                     jButtonCancel.setEnabled(false);
 
+                    String savedConnName = connNameTF.getText();
                     this.saveData();
                     this.loadConfigToGui();
+                    this.selectConfigByName(savedConnName);
                     this.setDetailEditable(false);
 
                     setTextDataDaysRetainTF(rawDataDaysRetainTF, configurationManager.getRawRetainDays());
@@ -558,9 +565,13 @@ public class ConnectToDbArea extends JDialog {
         connJTabbedPane.add(configMainJPanel, Labels.getLabel("gui.connection.connection.main"));
         connJTabbedPane.add(configOtherJPanel, Labels.getLabel("gui.connection.connection.other"));
 
-        mainJPanel.add(buttonPanel, "wrap, span 2, wmin 200");
-        mainJPanel.add(tableDataPaneConn, "growy, span 1, wmin 150");
-        mainJPanel.add(connJTabbedPane, "top, growx, wmin 200");
+        connJSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableDataPaneConn, connJTabbedPane);
+        connJSplitPane.setContinuousLayout(true);
+        connJSplitPane.setOneTouchExpandable(true);
+        connJSplitPane.setResizeWeight(0.3);
+
+        mainJPanel.add(buttonPanel, "wrap, wmin 200");
+        mainJPanel.add(connJSplitPane, "grow");
 
         JdialogComponentListener jdialogComponentListener = new JdialogComponentListener();
         this.addComponentListener(jdialogComponentListener);
@@ -743,14 +754,28 @@ public class ConnectToDbArea extends JDialog {
     private void loadConfigToGui(){
         modelConn.setRowCount(0);
 
-        configurationManager.getConnProfileList().forEach(e -> {
-            modelConn.addRow(new Object[]{e.getConfigName()});
-        });
+        configurationManager.getConnProfileList().stream()
+                .map(ConfigProfile::getConfigName)
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .forEach(name -> modelConn.addRow(new Object[]{name}));
+
+        tableConn.packAll();
 
         try {
             tableConn.setRowSelectionInterval(0, 0);
         } catch (IllegalArgumentException e){
             log.info("Catch IllegalArgumentException: Row index out of range");
+        }
+    }
+
+    private void selectConfigByName(String connName) {
+        for (int i = 0; i < modelConn.getRowCount(); i++) {
+            if (String.valueOf(modelConn.getValueAt(i, 0)).equalsIgnoreCase(connName)) {
+                int viewRow = tableConn.convertRowIndexToView(i);
+                tableConn.setRowSelectionInterval(viewRow, viewRow);
+                tableConn.scrollRowToVisible(viewRow);
+                return;
+            }
         }
     }
 

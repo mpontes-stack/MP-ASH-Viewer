@@ -36,7 +36,11 @@ public final class Config {
         globalKeyBindings = new GlobalKeyBindings();
         colorManager = new ColorManager();
 
-        Constructor constructor = new Constructor(new LoaderOptions());
+        // Allow legacy configs saved with the global tag !!config.profile.ConfigProfile
+        LoaderOptions loaderOptions = new LoaderOptions();
+        loaderOptions.setTagInspector(tag -> ConfigProfile.class.getName().equals(tag.getClassName()));
+
+        Constructor constructor = new Constructor(loaderOptions);
         constructor.addTypeDescription(new TypeDescription(ConfigProfile.class, "!ConfigProfile"));
 
         DumperOptions dumperOptions = new DumperOptions();
