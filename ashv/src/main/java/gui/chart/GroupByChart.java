@@ -240,6 +240,16 @@ public class GroupByChart {
         item.addActionListener(a -> ashFilter.setCondition(col, Collections.singleton(value)));
         menu.add(item);
 
+        String exclusionKey = AshFilter.exclusionKey(col);
+        JMenuItem notItem = new JMenuItem(Labels.getLabel("gui.filter.popup.not") + " " + col + " ≠ " + seriesName.trim());
+        notItem.addActionListener(a -> {
+            java.util.Set<String> values = new java.util.LinkedHashSet<>(
+                    ashFilter.getConditions().getOrDefault(exclusionKey, Collections.emptySet()));
+            values.add(value);
+            ashFilter.setCondition(exclusionKey, values);
+        });
+        menu.add(notItem);
+
         SwingUtilities.invokeLater(() -> menu.show(stackChartPanel.getStackedChart().getChartPanel(),
                 event.getTrigger().getX(), event.getTrigger().getY()));
     }

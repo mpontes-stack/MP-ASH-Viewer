@@ -77,12 +77,30 @@ public final class FilterPopup {
                             });
                             menu.add(orItem);
                         }
+
+                        // Exclusion (column != value), added to an existing exclusion of the same column
+                        String exclusionKey = AshFilter.exclusionKey(c.getKey());
+                        Set<String> excluded = current.getOrDefault(exclusionKey, Collections.emptySet());
+                        if (!excluded.contains(c.getValue())) {
+                            JMenuItem notItem = new JMenuItem(Labels.getLabel("gui.filter.popup.not") + " "
+                                    + FilterBar.describeCondition(exclusionKey, Collections.singleton(shorten(c.getValue()))));
+                            notItem.addActionListener(a -> {
+                                Set<String> newValues = new LinkedHashSet<>(excluded);
+                                newValues.add(c.getValue());
+                                ashFilter.setCondition(exclusionKey, newValues);
+                            });
+                            menu.add(notItem);
+                        }
                     }
                 }
 
                 menu.show(e.getComponent(), e.getX(), e.getY());
             }
         });
+    }
+
+    private static String shorten(String value) {
+        return value != null && value.length() > 50 ? value.substring(0, 50) + "..." : value;
     }
 
     private static String describe(List<Map.Entry<String, String>> conditions) {

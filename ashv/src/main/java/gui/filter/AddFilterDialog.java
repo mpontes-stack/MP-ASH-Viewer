@@ -44,6 +44,8 @@ public class AddFilterDialog extends JDialog {
     private final Supplier<long[]> rangeSupplier;
 
     private final JComboBox<String> columnBox = new JComboBox<>();
+    private final javax.swing.JRadioButton includeRB = new javax.swing.JRadioButton(Labels.getLabel("gui.filter.mode.include"), true);
+    private final javax.swing.JRadioButton excludeRB = new javax.swing.JRadioButton(Labels.getLabel("gui.filter.mode.exclude"));
     private final JTextField searchTF = new JTextField();
     private final JLabel statusLbl = new JLabel(" ");
     private final DefaultTableModel valueModel;
@@ -91,9 +93,18 @@ public class AddFilterDialog extends JDialog {
         applyButton.addActionListener(e -> apply());
         cancelButton.addActionListener(e -> dispose());
 
-        JPanel panel = new JPanel(new MigLayout("fill, ins 10", "[][grow]", "[][][grow][][]"));
+        javax.swing.ButtonGroup modeGroup = new javax.swing.ButtonGroup();
+        modeGroup.add(includeRB);
+        modeGroup.add(excludeRB);
+        includeRB.addActionListener(e -> loadValues());
+        excludeRB.addActionListener(e -> loadValues());
+
+        JPanel panel = new JPanel(new MigLayout("fill, ins 10", "[][grow]", "[][][][grow][][]"));
         panel.add(new JLabel(Labels.getLabel("gui.filter.column")));
         panel.add(columnBox, "growx, wrap");
+        panel.add(new JLabel(Labels.getLabel("gui.filter.mode")));
+        panel.add(includeRB, "split 2");
+        panel.add(excludeRB, "wrap");
         panel.add(new JLabel(Labels.getLabel("gui.filter.value")));
         panel.add(searchTF, "growx, wrap");
         panel.add(new JScrollPane(valueTable), "span, grow, wrap");
@@ -133,12 +144,13 @@ public class AddFilterDialog extends JDialog {
 
             @Override
             protected void done() {
-                if (isCancelled()) {
+                if (isCancelled() || this != worker) { // only the latest load fills the list
                     return;
                 }
                 try {
                     Map<String, Integer> values = get();
-                    Set<String> selected = ashFilter.getConditions().getOrDefault(colName, new LinkedHashSet<>());
+                    valueModel.setRowCount(0);
+                    Set<String> selected = ashFilter.getConditions().getOrDefault(conditionKey(colName), new LinkedHashSet<>());
 
                     values.entrySet().stream()
                             .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
@@ -165,6 +177,11 @@ public class AddFilterDialog extends JDialog {
         worker.execute();
     }
 
+    /** Key of the condition for the selected mode: "COL" (=) or "!COL" (!=) */
+    private String conditionKey(String colName) {
+        return excludeRB.isSelected() ? AshFilter.exclusionKey(colName) : colName;
+    }
+
     private void applySearch() {
         String text = searchTF.getText().trim();
         if (text.isEmpty()) {
@@ -186,6 +203,6 @@ public class AddFilterDialog extends JDialog {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         dispose();
-        ashFilter.setCondition(colName, values);
+        ashFilter.setCondition(conditionKey(colName), values);
     }
 }

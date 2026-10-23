@@ -21,6 +21,7 @@ import store.entity.database.MainData;
  * Cumulative filters applied to ASH raw data.
  * Conditions on different columns are combined with AND,
  * values of the same column are combined with OR.
+ * Exclusions (column != values) are stored with the key "!COLUMN" and keep rows matching none of the values.
  */
 @Slf4j
 @Singleton
@@ -33,6 +34,22 @@ public class AshFilter {
     @Inject
     public AshFilter(ConvertManager convertManager) {
         this.convertManager = convertManager;
+    }
+
+    private static final String EXCLUSION_PREFIX = "!";
+
+    /** Condition key of an exclusion (column != values) */
+    public static String exclusionKey(String colName) {
+        return EXCLUSION_PREFIX + colName;
+    }
+
+    public static boolean isExclusion(String key) {
+        return key.startsWith(EXCLUSION_PREFIX);
+    }
+
+    /** Column name of a condition key */
+    public static String colOf(String key) {
+        return isExclusion(key) ? key.substring(EXCLUSION_PREFIX.length()) : key;
     }
 
     public synchronized boolean isActive() {
@@ -101,6 +118,7 @@ public class AshFilter {
         Map<String, Set<String>> current = getConditions();
         if (ignoreColName != null) {
             current.remove(ignoreColName);
+            current.remove(exclusionKey(ignoreColName));
         }
         return new Matcher(colProfiles, current);
     }
@@ -115,21 +133,20 @@ public class AshFilter {
     public class Matcher {
         private final List<SqlColProfile> filterCols = new ArrayList<>();
         private final List<Set<String>> filterValues = new ArrayList<>();
+        private final List<Boolean> filterExclusions = new ArrayList<>();
         private final Map<Integer, Map<Integer, String>> valueCache = new HashMap<>();
 
         private Matcher(List<SqlColProfile> colProfiles, Map<String, Set<String>> current) {
-            current.forEach((colName, values) -> {
+            current.forEach((key, values) -> {
+                String colName = colOf(key);
                 Optional<SqlColProfile> col = colProfiles.stream()
                         .filter(c -> c.getColName().equalsIgnoreCase(colName)).findFirst();
-                if (col.isPresent()) {
-                    filterCols.add(col.get());
-                    filterValues.add(values);
-                } else {
-                    // column is not collected, nothing can match
+                if (!col.isPresent()) {
                     log.info("Filter column not found: " + colName);
-                    filterCols.add(null);
-                    filterValues.add(values);
                 }
+                filterCols.add(col.orElse(null));
+                filterValues.add(values);
+                filterExclusions.add(isExclusion(key));
             });
         }
 
@@ -140,7 +157,13 @@ public class AshFilter {
         public boolean matches(MainData sl, int row) {
             for (int i = 0; i < filterCols.size(); i++) {
                 SqlColProfile col = filterCols.get(i);
-                if (col == null || !filterValues.get(i).contains(getValue(col, sl, row))) {
+                if (filterExclusions.get(i)) {
+                    // column not collected: nothing to exclude
+                    if (col != null && filterValues.get(i).contains(getValue(col, sl, row))) {
+                        return false;
+                    }
+                } else if (col == null || !filterValues.get(i).contains(getValue(col, sl, row))) {
+                    // column not collected: nothing can match
                     return false;
                 }
             }

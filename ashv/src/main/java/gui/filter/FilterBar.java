@@ -82,18 +82,18 @@ public class FilterBar extends JPanel {
             add(noFilterLbl);
         }
 
-        conditions.forEach((colName, values) -> {
-            String valuesText = values.stream().map(FilterBar::displayValue).collect(Collectors.joining(", "));
-            String text = colName + " = " + valuesText;
-            if (text.length() > MAX_CHIP_TEXT) {
-                text = text.substring(0, MAX_CHIP_TEXT) + "...";
-            }
+        conditions.forEach((key, values) -> {
+            String fullText = describeCondition(key, values);
+            String text = fullText.length() > MAX_CHIP_TEXT ? fullText.substring(0, MAX_CHIP_TEXT) + "..." : fullText;
 
-            JButton chip = new JButton(text + "  ×");
+            JButton chip = new JButton(text + "  \u00D7");
             chip.putClientProperty("JButton.buttonType", "roundRect");
-            chip.setToolTipText("<html>" + colName + " = " + escape(valuesText) + "<br>"
+            if (AshFilter.isExclusion(key)) {
+                chip.putClientProperty("JComponent.outline", "error"); // exclusions in red
+            }
+            chip.setToolTipText("<html>" + escape(fullText) + "<br>"
                     + Labels.getLabel("gui.filter.remove.tooltip") + "</html>");
-            chip.addActionListener(e -> ashFilter.removeCondition(colName));
+            chip.addActionListener(e -> ashFilter.removeCondition(key));
             add(chip);
         });
 
@@ -176,11 +176,11 @@ public class FilterBar extends JPanel {
         List<String> columns = getFilterColumns();
         Map<String, Set<String>> available = new LinkedHashMap<>();
         List<String> missing = new ArrayList<>();
-        conditions.forEach((col, values) -> {
-            if (columns.contains(col)) {
-                available.put(col, values);
+        conditions.forEach((key, values) -> {
+            if (columns.contains(AshFilter.colOf(key))) {
+                available.put(key, values);
             } else {
-                missing.add(col);
+                missing.add(AshFilter.colOf(key));
             }
         });
 
@@ -194,8 +194,16 @@ public class FilterBar extends JPanel {
 
     private static String describe(Map<String, Set<String>> conditions) {
         return conditions.entrySet().stream()
-                .map(c -> c.getKey() + " = " + c.getValue().stream().map(FilterBar::displayValue).collect(Collectors.joining(", ")))
+                .map(c -> describeCondition(c.getKey(), c.getValue()))
                 .collect(Collectors.joining("; "));
+    }
+
+    /**
+     * "MODULE = A, B" or "SESSION_TYPE \u2260 BACKGROUND"
+     */
+    static String describeCondition(String key, Set<String> values) {
+        String op = AshFilter.isExclusion(key) ? " \u2260 " : " = ";
+        return AshFilter.colOf(key) + op + values.stream().map(FilterBar::displayValue).collect(Collectors.joining(", "));
     }
 
     private List<String> getFilterColumns() {

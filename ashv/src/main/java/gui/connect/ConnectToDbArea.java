@@ -166,6 +166,7 @@ public class ConnectToDbArea extends JDialog {
     private JLabel securityContainerLbl = new JLabel(Labels.getLabel("gui.connection.security.container"));
 
     private JTextField connNameTF = new JTextField();
+    private JTextField searchTF = new JTextField();
     private JLabel groupLbl = new JLabel(Labels.getLabel("gui.connection.group"), SwingConstants.LEADING);
     private JComboBox<String> groupBox = new JComboBox<>();
     private JTextField usernameTF = new JTextField();
@@ -591,7 +592,29 @@ public class ConnectToDbArea extends JDialog {
         connJTabbedPane.add(configMainJPanel, Labels.getLabel("gui.connection.connection.main"));
         connJTabbedPane.add(configOtherJPanel, Labels.getLabel("gui.connection.connection.other"));
 
-        connJSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableDataPaneConn, connJTabbedPane);
+        // Search above the connection tree: filters by name or group while typing
+        searchTF.putClientProperty("JTextField.placeholderText", Labels.getLabel("gui.connection.search"));
+        searchTF.putClientProperty("JTextField.showClearButton", true);
+        searchTF.putClientProperty("JTextField.leadingIcon", new com.formdev.flatlaf.icons.FlatSearchIcon());
+        searchTF.setToolTipText(Labels.getLabel("gui.connection.search.tooltip"));
+        searchTF.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { loadConfigToGui(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { loadConfigToGui(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { loadConfigToGui(); }
+        });
+        searchTF.registerKeyboardAction(e -> searchTF.setText(""),
+                javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_FOCUSED);
+        searchTF.addActionListener(e -> { // Enter: first connection found
+            selectFirstConnection((ConnTreeNode) modelConn.getRoot());
+            treeConn.requestFocusInWindow();
+        });
+
+        JPanel connTreePanel = new JPanel(new java.awt.BorderLayout(0, 4));
+        connTreePanel.add(searchTF, java.awt.BorderLayout.NORTH);
+        connTreePanel.add(tableDataPaneConn, java.awt.BorderLayout.CENTER);
+        connTreePanel.setMinimumSize(new Dimension(100, 0));
+
+        connJSplitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, connTreePanel, connJTabbedPane);
         connJSplitPane.setContinuousLayout(true);
         connJSplitPane.setOneTouchExpandable(true);
         connJSplitPane.setResizeWeight(0.3);
@@ -605,6 +628,7 @@ public class ConnectToDbArea extends JDialog {
 
     private void setDetailEditable(boolean bParameter){
         connNameTF.setEnabled(bParameter);
+        searchTF.setEnabled(!bParameter); // filtering the tree while editing would load another connection
         groupBox.setEnabled(bParameter);
         usernameTF.setEnabled(bParameter);
         passwordTF.setEnabled(bParameter);
@@ -790,7 +814,12 @@ public class ConnectToDbArea extends JDialog {
         List<ConfigProfile> configs = new ArrayList<>(configurationManager.getConnProfileList());
         configs.sort(Comparator.comparing(ConfigProfile::getConfigName, String.CASE_INSENSITIVE_ORDER));
 
+        String search = normalizeForSearch(searchTF.getText());
+
         for (ConfigProfile config : configs) {
+            if (!matchesSearch(search, config)) {
+                continue;
+            }
             ConnTreeNode parent = root;
             String path = "";
             String groupName = ConfigurationManager.normalizeGroupName(config.getGroupName());
@@ -826,6 +855,32 @@ public class ConnectToDbArea extends JDialog {
         if (previousConnName == null || !selectConfigByName(previousConnName)) {
             selectFirstConnection(root);
         }
+    }
+
+    /**
+     * All words of the search must appear in the connection name or group (ignoring case and accents)
+     */
+    private static boolean matchesSearch(String search, ConfigProfile config) {
+        if (search.isEmpty()) {
+            return true;
+        }
+        String text = normalizeForSearch(config.getConfigName() + " " + java.util.Objects.toString(config.getGroupName(), ""));
+        for (String word : search.split("\\s+")) {
+            if (!text.contains(word)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String normalizeForSearch(String text) {
+        if (text == null) {
+            return "";
+        }
+        return java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .toLowerCase()
+                .trim();
     }
 
     private boolean selectConfigByName(String connName) {
