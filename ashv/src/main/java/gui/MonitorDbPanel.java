@@ -18,6 +18,7 @@ import gui.filter.FilterBar;
 import gui.snapshot.SnapshotPanel;
 import remote.RemoteDBManager;
 import gui.gantt.MonitorGantt2;
+import gui.lock.LockTreePanel;
 import gui.table.RawDataTable;
 import gui.util.ProgressBarUtil;
 import lombok.Getter;
@@ -67,6 +68,7 @@ public class MonitorDbPanel {
 
     private MonitorGantt2 monitorGantt20;
     private RawDataTable rawDataTable20;
+    private LockTreePanel lockTreePanel;
 
     @Getter @Setter private ConnProfile connProfile;
     @Getter @Setter private IProfile iProfile;
@@ -120,6 +122,9 @@ public class MonitorDbPanel {
         mainGanttAndRaw.add("Top sql & sessions", chartDatasetManager.getMainNameChartDataset().getMonitorGantt2());
         mainGanttAndRaw.add("Raw data", chartDatasetManager.getMainNameChartDataset().getRawDataTable());
         mainGanttAndRaw.add("ASH Report", chartDatasetManager.getMainNameChartDataset().getAshReport());
+        lockTreePanel = new LockTreePanel(storeManager, ashFilter, getFromRemoteAndStore::getMainChartRange, true);
+        chartDatasetManager.getMainNameChartDataset().getStackChartPanel().addChartListenerReleaseMouse(lockTreePanel);
+        mainGanttAndRaw.add(Labels.getLabel("gui.lock.tab"), lockTreePanel);
 
         FilterBar filterBar = newFilterBar(getFromRemoteAndStore::getMainChartRange);
         JPanel topActivityNorthPanel = new JPanel(new BorderLayout());
@@ -176,6 +181,7 @@ public class MonitorDbPanel {
         groupByChart.getStackChartPanel().addChartListenerReleaseMouse(main.getMonitorGantt2());
         groupByChart.getStackChartPanel().addChartListenerReleaseMouse(main.getRawDataTable());
         groupByChart.getStackChartPanel().addChartListenerReleaseMouse(main.getAshReport());
+        groupByChart.getStackChartPanel().addChartListenerReleaseMouse(lockTreePanel);
         getFromRemoteAndStore.setMainChartListener(groupByChart::refresh);
 
         CardLayout cardLayout = new CardLayout();

@@ -12,6 +12,7 @@ import core.manager.ConstantManager;
 import gui.chart.panel.NameChartDataset;
 import gui.chart.panel.StackChartPanel;
 import gui.gantt.MonitorGantt2;
+import gui.lock.LockTreePanel;
 import gui.table.RawDataTable;
 import gui.util.ProgressBarUtil;
 import lombok.Getter;
@@ -228,6 +229,13 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
 
         mainStackChartPanelTA.addChartListenerReleaseMouse(monitorGantt20);
         mainStackChartPanelTA.addChartListenerReleaseMouse(rawDataTable20);
+
+        if (ashFilter != null) {
+            long[] period = {(long) ganttParam.getBeginTime(), (long) ganttParam.getEndTime()};
+            LockTreePanel lockTreePanel = new LockTreePanel(storeManager, ashFilter, () -> period, false);
+            historyGanttAndRaw.add(Labels.getLabel("gui.lock.tab"), lockTreePanel);
+            mainStackChartPanelTA.addChartListenerReleaseMouse(lockTreePanel);
+        }
 
         topASplitPane.add(mainStackChartPanelTA.getStackedChart().getChartPanel(), JSplitPane.TOP);
         topASplitPane.add(historyGanttAndRaw, JSplitPane.BOTTOM);
