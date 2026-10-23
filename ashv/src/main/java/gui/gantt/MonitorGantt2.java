@@ -17,6 +17,8 @@ import gui.BasicFrame;
 import gui.detail.SessionDetail;
 import gui.detail.SqlDetail;
 import gui.filter.FilterPopup;
+import config.Labels;
+import gui.util.CsvExport;
 import gui.util.ProgressBarUtil;
 import lombok.Getter;
 import lombok.Setter;
@@ -265,10 +267,51 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
 
         splitPaneSqlSession.requestFocus();
 
+        JPanel tables = new JPanel(new BorderLayout());
+        tables.add(createExportBar(), BorderLayout.NORTH);
+        tables.add(this.splitPaneSqlSession, BorderLayout.CENTER);
+
         this.main.removeAll();
-        this.main.add(this.splitPaneSqlSession);
+        this.main.add(tables);
         this.repaint();
         this.validate();
+    }
+
+    /** "Exportar CSV" menu: Top SQL or Top sessions, with the samples of each wait class */
+    private JPanel createExportBar() {
+        JButton export = new JButton(Labels.getLabel("gui.export.button") + " \u25BE");
+        export.setToolTipText(Labels.getLabel("gui.export.tooltip"));
+
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem sql = new JMenuItem(Labels.getLabel("gui.export.topsql"));
+        sql.addActionListener(e -> export(ganttDataByIdSqlId, columnNamesSqls[0], "TopSQL"));
+        JMenuItem sessions = new JMenuItem(Labels.getLabel("gui.export.topsessions"));
+        sessions.addActionListener(e -> export(ganttDataByIdSessionId, columnNamesSessions[0], "TopSessoes"));
+        menu.add(sql);
+        menu.add(sessions);
+        export.addActionListener(e -> menu.show(export, 0, export.getHeight()));
+
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        bar.add(export);
+        return bar;
+    }
+
+    private void export(GanttDataById2 data, String[] columnNames, String tab) {
+        if (data == null || lastGanttParamIn == null) {
+            return;
+        }
+        List<String> groups = new ArrayList<>();
+        List<Object[]> rows = data.getDataToExport(columnNames.length, groups);
+
+        List<String> header = new ArrayList<>();
+        header.add(Labels.getLabel("gui.export.col.activity"));
+        header.add(Labels.getLabel("gui.export.col.samples"));
+        header.addAll(Arrays.asList(columnNames).subList(1, columnNames.length));
+        header.addAll(groups);
+
+        CsvExport.save(this, CsvExport.fileName(
+                storeManager.getConfigurationManager().getCurrentConfiguration().getConfigName(), tab,
+                (long) lastGanttParamIn.getBeginTime(), (long) lastGanttParamIn.getEndTime()), header, rows);
     }
 
     private void setTooltipAndPercent(GanttTable gantttable) {

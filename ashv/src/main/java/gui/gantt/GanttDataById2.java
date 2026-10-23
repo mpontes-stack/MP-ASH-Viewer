@@ -243,6 +243,55 @@ public class GanttDataById2 {
         return data;
     }
 
+    /**
+     * Rows for CSV export, most active first: activity %, samples, the table columns of {@link #getDataToGantt}
+     * (from the second one) and the samples of each wait class (of each wait event for a wait class detail)
+     *
+     * @param groups filled with the wait class / event names, in column order
+     */
+    public List<Object[]> getDataToExport(int columnCnt, List<String> groups) {
+        long total = this.hashmapCache.values().stream().flatMap(List::stream).mapToInt(TripleValueCache::getSum).sum();
+
+        Map<String, Integer> groupTotals = new HashMap<>();
+        Map<CompositeKeyCache2, Map<String, Integer>> byGroup = new HashMap<>();
+        this.hashmapCache.forEach((key, values) -> {
+            Map<String, Integer> counts = new HashMap<>();
+            for (TripleValueCache v : values) {
+                String name = waitClassId == -1
+                        ? iProfile.getWaitClass(v.getWaitClassId())
+                        : this.olapDAO.getEventStrValueForWaitEventId(v.getWaitEventId());
+                counts.merge(name, v.getSum(), Integer::sum);
+                groupTotals.merge(name, v.getSum(), Integer::sum);
+            }
+            byGroup.put(key, counts);
+        });
+        groupTotals.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .forEachOrdered(e -> groups.add(e.getKey()));
+
+        List<Object[]> rows = new ArrayList<>();
+        this.hashmapCache.entrySet().stream()
+                .sorted((f1, f2) -> Integer.compare(
+                        f2.getValue().stream().mapToInt(TripleValueCache::getSum).sum(),
+                        f1.getValue().stream().mapToInt(TripleValueCache::getSum).sum()))
+                .forEach(e -> {
+                    int samples = e.getValue().stream().mapToInt(TripleValueCache::getSum).sum();
+                    Object[][] data = new Object[1][columnCnt];
+                    this.loadDataByRow(data, 0, new AtomicInteger(1), e.getKey());
+
+                    Object[] row = new Object[2 + (columnCnt - 1) + groups.size()];
+                    row[0] = total == 0 ? 0.0 : Utils.round(samples * 100.0 / total, 2);
+                    row[1] = samples;
+                    System.arraycopy(data[0], 1, row, 2, columnCnt - 1);
+                    Map<String, Integer> counts = byGroup.get(e.getKey());
+                    for (int i = 0; i < groups.size(); i++) {
+                        row[1 + columnCnt + i] = counts.get(groups.get(i));
+                    }
+                    rows.add(row);
+                });
+        return rows;
+    }
+
     private void loadDataByRow(Object[][] data, int rowNumber, AtomicInteger atomicIntegerInter, CompositeKeyCache2 key){
         String[] outputParam = this.olapDAO.getStrParameterValueById(key.getParamId()).split("_");
         String[] addParam = this.olapDAO.getAdditStrArrayParameters(key.getParamId());

@@ -6,6 +6,7 @@ import core.filter.AshFilter;
 import core.lock.LockTree;
 import core.lock.ObjectNames;
 import gui.filter.FilterPopup;
+import gui.util.CsvExport;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -60,6 +61,9 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
     private final JCheckBox background = new JCheckBox(Labels.getLabel("gui.lock.background"));
     private LockTree lastTree;
     private IProfile lastProfile;
+    private long[] lastRange;
+    private LockTreeModel lastModel;
+    private final JButton export = new JButton(Labels.getLabel("gui.export.button"));
     private final JPanel content = new JPanel(new BorderLayout());
 
     /**
@@ -86,6 +90,10 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
             if (lastTree != null) show(lastTree, lastProfile);
         });
         top.add(background);
+        export.setToolTipText(Labels.getLabel("gui.export.tooltip"));
+        export.setEnabled(false);
+        export.addActionListener(e -> exportTree());
+        top.add(export);
         top.add(periodLabel);
         top.add(statusLabel);
         top.add(objectsLabel);
@@ -120,12 +128,15 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
     private void load() {
         pending = false;
         lastTree = null;
+        lastModel = null;
+        export.setEnabled(false);
         long[] range = selectedRange != null ? selectedRange : defaultRange.get();
         int gen = generation.incrementAndGet();
         if (range == null) {
             showMessage(Labels.getLabel("gui.lock.select"));
             return;
         }
+        lastRange = range;
         periodLabel.setText(formatPeriod(range[0], range[1]));
         statusLabel.setText("");
         objectsLabel.setText("");
@@ -174,11 +185,15 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
         statusLabel.setText("—  " + roots.size() + " " + Labels.getLabel("gui.lock.status.roots")
                 + ", " + LockTree.blockedSessions(roots) + " " + Labels.getLabel("gui.lock.status.blocked") + hiddenText);
         if (roots.isEmpty()) {
+            lastModel = null;
+            export.setEnabled(false);
             showMessage(Labels.getLabel("gui.lock.only.background"));
             return;
         }
 
         LockTreeModel model = new LockTreeModel(roots, objectNames);
+        lastModel = model;
+        export.setEnabled(true);
         JXTreeTable treeTable = new JXTreeTable(model);
         treeTable.setRootVisible(false);
         treeTable.setShowsRootHandles(true);
@@ -247,6 +262,37 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
     private static void collectObjects(LockTree.Node node, List<String> ids) {
         ids.add(node.getObject());
         node.getChildren().forEach(c -> collectObjects(c, ids));
+    }
+
+    /** Tree as a list: level and final blocker, then the columns of the table */
+    private void exportTree() {
+        if (lastModel == null || lastRange == null) {
+            return;
+        }
+        List<String> header = new ArrayList<>();
+        header.add(Labels.getLabel("gui.lock.col.level"));
+        header.add(Labels.getLabel("gui.lock.col.root"));
+        for (int col = 0; col < lastModel.getColumnCount(); col++) {
+            header.add(lastModel.getColumnName(col));
+        }
+        List<Object[]> rows = new ArrayList<>();
+        for (LockTree.Node root : lastModel.roots) {
+            addRows(root, 0, root.getSid(), rows);
+        }
+        CsvExport.save(this, CsvExport.fileName(
+                storeManager.getConfigurationManager().getCurrentConfiguration().getConfigName(), "Bloqueios",
+                lastRange[0], lastRange[1]), header, rows);
+    }
+
+    private void addRows(LockTree.Node node, int level, String root, List<Object[]> rows) {
+        Object[] row = new Object[2 + lastModel.getColumnCount()];
+        row[0] = level;
+        row[1] = root;
+        for (int col = 0; col < lastModel.getColumnCount(); col++) {
+            row[2 + col] = lastModel.getValueAt(node, col);
+        }
+        rows.add(row);
+        node.getChildren().forEach(c -> addRows(c, level + 1, root, rows));
     }
 
     /** Right click: filter by the session, its waiters or the value of the cell */

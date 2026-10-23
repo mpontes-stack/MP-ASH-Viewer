@@ -7,6 +7,8 @@ import gui.filter.FilterPopup;
 import gui.table.searchable.DecoratorFactory;
 import gui.table.searchable.MatchingTextHighlighter;
 import gui.table.searchable.XMatchingTextHighlighter;
+import config.Labels;
+import gui.util.CsvExport;
 import gui.util.ProgressBarUtil;
 import lombok.Getter;
 import lombok.Setter;
@@ -31,6 +33,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -51,6 +54,7 @@ public class RawDataTable extends JPanel implements IDetailPanel {
     private JToolBar buttonPanel;
     private JPanel rawDataPanel;
     private JButton loadData;
+    private JButton exportData;
 
     private JXTable table;
     private JXFindBar findBar;
@@ -83,6 +87,10 @@ public class RawDataTable extends JPanel implements IDetailPanel {
             long end =  (long) ganttParamIn.getEndTime();
             loadRawData(begin, end);
         });
+
+        exportData = new JButton(Labels.getLabel("gui.export.button"));
+        exportData.setToolTipText(Labels.getLabel("gui.export.tooltip"));
+        exportData.addActionListener(e -> exportRawData());
 
         mainPanel.add(buttonPanel, BorderLayout.NORTH);
         mainPanel.add(rawDataPanel, BorderLayout.CENTER);
@@ -118,6 +126,9 @@ public class RawDataTable extends JPanel implements IDetailPanel {
 
         buttonPanel.add(Box.createRigidArea(new Dimension(10, 0)));
         buttonPanel.add(loadData);
+        buttonPanel.add(Box.createRigidArea(new Dimension(10, 0)));
+        exportData.setEnabled(false);
+        buttonPanel.add(exportData);
         buttonPanel.add(Box.createRigidArea(new Dimension(10, 0)));
         buttonPanel.add(new JLabel(dateFormat.format(ganttParamIn.getBeginTime())+
                         " <<" + getPeriod(ganttParamIn.getBeginTime(), ganttParamIn.getEndTime()) + ">> "+
@@ -197,6 +208,7 @@ public class RawDataTable extends JPanel implements IDetailPanel {
                     /*----------------------*/
                     rawDataPanel.removeAll();
                     rawDataPanel.add(p);
+                    SwingUtilities.invokeLater(() -> exportData.setEnabled(true));
 
                     jFrame.repaint();
 
@@ -206,6 +218,42 @@ public class RawDataTable extends JPanel implements IDetailPanel {
             }
         };
         t.start();
+    }
+
+    /**
+     * Loaded rows as shown: visible columns in screen order, current sort
+     */
+    private void exportRawData() {
+        if (table == null || ganttParamIn == null) {
+            return;
+        }
+        List<String> header = new ArrayList<>();
+        for (int col = 0; col < table.getColumnCount(); col++) {
+            header.add(table.getColumnName(col));
+        }
+        List<Object[]> rows = new ArrayList<>();
+        for (int row = 0; row < table.getRowCount(); row++) {
+            Object[] values = new Object[table.getColumnCount()];
+            for (int col = 0; col < values.length; col++) {
+                values[col] = excelDate(table.getValueAt(row, col));
+            }
+            rows.add(values);
+        }
+        CsvExport.save(this, CsvExport.fileName(
+                storeManager.getConfigurationManager().getCurrentConfiguration().getConfigName(), "RawData",
+                (long) ganttParamIn.getBeginTime(), (long) ganttParamIn.getEndTime()), header, rows);
+    }
+
+    private static final java.util.regex.Pattern DOTTED_DATE =
+            java.util.regex.Pattern.compile("^(\\d\\d)\\.(\\d\\d)\\.(\\d{4})( \\d\\d:\\d\\d:\\d\\d)?$");
+
+    /** "23.10.2026 07:05:00" -> "23/10/2026 07:05:00", read as a date by Excel */
+    private static Object excelDate(Object value) {
+        if (!(value instanceof String)) {
+            return value;
+        }
+        java.util.regex.Matcher m = DOTTED_DATE.matcher((String) value);
+        return m.matches() ? m.group(1) + "/" + m.group(2) + "/" + m.group(3) + (m.group(4) == null ? "" : m.group(4)) : value;
     }
 
     private JXCollapsiblePane connectCollapsibleFindBarWithTable() {
