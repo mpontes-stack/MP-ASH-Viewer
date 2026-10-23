@@ -136,7 +136,10 @@ public class MonitorDbPanel {
 
     public void adddGui(){
         mainTabbedPane.add("Top Activity", topActivitySplitPane);
-        mainTabbedPane.add("Detail", detailSplitPane);
+        // Detail tab is hidden by default (Top Activity "group by" covers it); -Dashv.detailtab=true shows it
+        if (Boolean.getBoolean("ashv.detailtab")) {
+            mainTabbedPane.add("Detail", detailSplitPane);
+        }
         mainTabbedPane.add("History", controlMainDetailHistory);
     }
 
