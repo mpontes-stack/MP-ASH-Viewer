@@ -191,7 +191,7 @@ public class MonitorGantt3 extends JPanel implements IDetailPanel {
     private void setTooltipAndPercent(GanttTable gantttable) {
         final String textPainter = ConstantManager.TEXT_PAINTER;
         BasicPainterContext graphics = new BasicPainterContext();
-        graphics.setPaint(Color.BLACK);
+        graphics.setPaint(getTextColor()); // theme text color (readable in dark mode)
         graphics.put(textPainter, new Font(null, Font.BOLD, 10));
         gantttable.getDrawingContext().put(textPainter,
                 ContextResources.GRAPHICS_CONTEXT, graphics);
@@ -255,4 +255,9 @@ public class MonitorGantt3 extends JPanel implements IDetailPanel {
         }
     }
 
+
+    private static Color getTextColor() {
+        Color color = UIManager.getColor("Table.foreground");
+        return color != null ? color : Color.BLACK;
+    }
 }

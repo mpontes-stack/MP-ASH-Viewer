@@ -107,6 +107,13 @@ public class StackedChart implements SelectionChangeListener<XYCursor> {
         this.setLegendTitle();
         this.jFreeChart.addSubtitle(this.legendTitle);
         this.chartPanel.setRangeZoomable(false);
+
+        ChartStyle.current().apply(this.jFreeChart, this.xyPlot, this.legendTitle, this.blockContainerParent,
+                this.getLegendFontSize());
+        Shape legendShape = ChartStyle.current().legendShape();
+        if (legendShape != null) {
+            this.stackedXYAreaRenderer3.setLegendArea(legendShape);
+        }
     }
 
     public ChartPanel getChartPanel() { return this.chartPanel; }
@@ -140,6 +147,7 @@ public class StackedChart implements SelectionChangeListener<XYCursor> {
 
     public void setChartTitle(String titleText){
         this.jFreeChart.setTitle(titleText);
+        ChartStyle.current().styleTitle(this.jFreeChart);
     }
 
     public void setSeriesPaintDynamicDetail(String seriesName){
@@ -185,6 +193,7 @@ public class StackedChart implements SelectionChangeListener<XYCursor> {
         domainAxis.setLabelInfo(info);
 
         this.xyPlot.setDomainAxis(domainAxis);
+        ChartStyle.current().styleAxis(domainAxis);
     }
 
     public void addSeriesValue(double x, double y, String seriesName){
