@@ -21,7 +21,10 @@ public class OracleSE extends OracleEE implements IProfile {
             + "vs.final_blocking_session FINAL_BLOCKING_SESSION, vs.sql_exec_start SQL_EXEC_START, "
             + "vs.prev_sql_id PREV_SQL_ID, vs.plsql_entry_object_id PLSQL_ENTRY_OBJECT_ID, "
             + "vs.client_identifier CLIENT_IDENTIFIER, vs.client_info CLIENT_INFO, "
-            + "vs.service_name SERVICE_NAME, vs.sql_hash_value SQL_HASH_VALUE "
+            + "vs.service_name SERVICE_NAME, vs.sql_hash_value SQL_HASH_VALUE, "
+            // v$session has no serial# of the blocker: looked up only for blocked rows of this instance
+            + "(CASE WHEN vs.blocking_session IS NOT NULL AND vs.blocking_instance = USERENV('INSTANCE') "
+            + "THEN (SELECT b.serial# FROM v$session b WHERE b.sid = vs.blocking_session) END) BLOCKING_SESSION_SERIAL# "
             + "FROM "
             + "v$session vs, v$sesstat vss, audit_actions au "
             + "WHERE vs.sid != ( select distinct sid from v$mystat  where rownum < 2 ) "

@@ -32,7 +32,8 @@ public final class LockTree {
 
     /** Raw data columns shown in the tree (optional, empty when not collected) */
     public static final String USERNAME = "USERNAME", PROGRAM = "PROGRAM", MACHINE = "MACHINE", MODULE = "MODULE",
-            CURRENT_OBJ = "CURRENT_OBJ#", SESSION_TYPE = "SESSION_TYPE";
+            CURRENT_OBJ = "CURRENT_OBJ#", SESSION_TYPE = "SESSION_TYPE",
+            BLOCKING_SESSION_SERIAL = "BLOCKING_SESSION_SERIAL#";
 
     /** The connection does not collect BLOCKING_SESSION (e.g. Postgres) */
     @Getter private boolean notCollected;
@@ -146,7 +147,7 @@ public final class LockTree {
 
     /** Values of one stored row used by the tree */
     private static final class Row {
-        String sid, serial, blocker, username, program, machine, module, sqlId, event, object, type;
+        String sid, serial, blocker, blockerSerial, username, program, machine, module, sqlId, event, object, type;
         boolean matches;
     }
 
@@ -178,11 +179,15 @@ public final class LockTree {
         Optional<SqlColProfile> moduleCol = findCol(cols, MODULE);
         Optional<SqlColProfile> objectCol = findCol(cols, CURRENT_OBJ);
         Optional<SqlColProfile> typeCol = findCol(cols, SESSION_TYPE);
+        Optional<SqlColProfile> blockerSerialCol = findCol(cols, BLOCKING_SESSION_SERIAL);
 
         // final blocker -> blocker -> waiter -> waits of the waiter for this blocker
         Map<String, Map<String, Map<String, Node>>> edges = new HashMap<>();
         Map<String, Node> rootStats = new HashMap<>();
+        // session details by "sid" and by "sid,serial"
         Map<String, Node> sessionInfo = new HashMap<>();
+        // final blocker -> serial# of the blocker seen by its waiters -> samples (collected since stage 2)
+        Map<String, Map<String, Integer>> rootSerials = new HashMap<>();
 
         EntityCursor<MainData> cursor = storeManager.getDatabaseDAO().getMainDataDAO().getPrimaryIndex()
                 .entities(begin, true, end, false);
@@ -207,10 +212,12 @@ public final class LockTree {
                     r.event = value(matcher, eventCol, sl, i);
                     r.object = value(matcher, objectCol, sl, i);
                     r.type = value(matcher, typeCol, sl, i);
+                    r.blockerSerial = value(matcher, blockerSerialCol, sl, i);
                     r.matches = matcher.matches(sl, i);
                     rows[i] = r;
                     bySid.putIfAbsent(r.sid, r);
                     sessionInfo.computeIfAbsent(r.sid, Node::new).info(r);
+                    sessionInfo.computeIfAbsent(r.sid + "," + r.serial, k -> new Node(r.sid)).info(r);
                 }
 
                 Set<String> rootsOfSample = new HashSet<>();
@@ -220,6 +227,9 @@ public final class LockTree {
                     }
                     String root = finalBlocker(r, bySid);
                     rootsOfSample.add(root);
+                    if (root.equals(r.blocker) && !r.blockerSerial.isEmpty()) {
+                        Node.count(rootSerials.computeIfAbsent(root, k -> new HashMap<>()), r.blockerSerial);
+                    }
                     if (r.matches) {
                         Node edge = edges.computeIfAbsent(root, k -> new HashMap<>())
                                 .computeIfAbsent(r.blocker, k -> new HashMap<>())
@@ -248,7 +258,13 @@ public final class LockTree {
             root.root = true;
             root.blockingSamples = rootStats.get(rootSid).blockingSamples;
             root.activeWhileBlocking = rootStats.get(rootSid).activeWhileBlocking;
-            Node info = sessionInfo.get(rootSid);
+            // serial# from its waiters, or from its own samples while blocking: details of that session only;
+            // without it (history before stage 2), details of any session with the same SID in the period
+            Map<String, Integer> serials = rootSerials.get(rootSid);
+            if (serials != null) {
+                root.serial = Node.top(serials);
+            }
+            Node info = root.serial.isEmpty() ? sessionInfo.get(rootSid) : sessionInfo.get(rootSid + "," + root.serial);
             if (info != null) {
                 root.info(toRow(info));
                 root.background = info.background;
@@ -305,7 +321,7 @@ public final class LockTree {
 
     private static Row toRow(Node info) {
         Row r = new Row();
-        r.serial = info.serial;
+        r.serial = ""; // never taken from another session with the same SID
         r.username = info.username;
         r.program = info.program;
         r.machine = info.machine;

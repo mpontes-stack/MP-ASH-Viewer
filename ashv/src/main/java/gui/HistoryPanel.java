@@ -12,6 +12,7 @@ import core.manager.ConstantManager;
 import gui.chart.panel.NameChartDataset;
 import gui.chart.panel.StackChartPanel;
 import gui.gantt.MonitorGantt2;
+import core.lock.ObjectNames;
 import gui.lock.LockTreePanel;
 import gui.table.RawDataTable;
 import gui.util.ProgressBarUtil;
@@ -55,6 +56,8 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
     @Getter private GanttParam lastGanttParam;
     private boolean isReloadNeeded = false;
     @Getter private volatile String groupByColName;
+    /** Names of CURRENT_OBJ# in the "Bloqueios" tab, null to show the ids */
+    @Setter private ObjectNames objectNames;
 
     public HistoryPanel(BasicFrame jFrame,
                         ColorManager colorManager,
@@ -232,7 +235,7 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
 
         if (ashFilter != null) {
             long[] period = {(long) ganttParam.getBeginTime(), (long) ganttParam.getEndTime()};
-            LockTreePanel lockTreePanel = new LockTreePanel(storeManager, ashFilter, () -> period, false);
+            LockTreePanel lockTreePanel = new LockTreePanel(storeManager, ashFilter, () -> period, objectNames, false);
             historyGanttAndRaw.add(Labels.getLabel("gui.lock.tab"), lockTreePanel);
             mainStackChartPanelTA.addChartListenerReleaseMouse(lockTreePanel);
         }

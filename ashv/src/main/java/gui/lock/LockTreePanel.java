@@ -4,6 +4,7 @@ import config.Labels;
 import config.profile.SqlColProfile;
 import core.filter.AshFilter;
 import core.lock.LockTree;
+import core.lock.ObjectNames;
 import gui.filter.FilterPopup;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
@@ -47,6 +48,7 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
     private final StoreManager storeManager;
     private final AshFilter ashFilter;
     private final Supplier<long[]> defaultRange;
+    private final ObjectNames objectNames;
 
     private volatile long[] selectedRange;
     private boolean pending = true;
@@ -54,6 +56,7 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
 
     private final JLabel periodLabel = new JLabel();
     private final JLabel statusLabel = new JLabel();
+    private final JLabel objectsLabel = new JLabel();
     private final JCheckBox background = new JCheckBox(Labels.getLabel("gui.lock.background"));
     private LockTree lastTree;
     private IProfile lastProfile;
@@ -61,14 +64,16 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
 
     /**
      * @param defaultRange period used before a selection is made in the chart
+     * @param objectNames names of CURRENT_OBJ#, null to show the ids
      * @param reloadOnChange reload on filter change (false for panels rebuilt by their owner)
      */
     public LockTreePanel(StoreManager storeManager, AshFilter ashFilter, Supplier<long[]> defaultRange,
-                         boolean reloadOnChange) {
+                         ObjectNames objectNames, boolean reloadOnChange) {
         super(new BorderLayout());
         this.storeManager = storeManager;
         this.ashFilter = ashFilter;
         this.defaultRange = defaultRange;
+        this.objectNames = objectNames;
 
         JButton refresh = new JButton(Labels.getLabel("gui.lock.refresh"));
         refresh.setToolTipText(Labels.getLabel("gui.lock.refresh.tooltip"));
@@ -83,6 +88,7 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
         top.add(background);
         top.add(periodLabel);
         top.add(statusLabel);
+        top.add(objectsLabel);
         add(top, BorderLayout.NORTH);
         add(content, BorderLayout.CENTER);
 
@@ -122,6 +128,7 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
         }
         periodLabel.setText(formatPeriod(range[0], range[1]));
         statusLabel.setText("");
+        objectsLabel.setText("");
         showMessage(Labels.getLabel("gui.lock.loading"));
 
         List<SqlColProfile> cols = storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList();
@@ -171,7 +178,7 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
             return;
         }
 
-        LockTreeModel model = new LockTreeModel(roots);
+        LockTreeModel model = new LockTreeModel(roots, objectNames);
         JXTreeTable treeTable = new JXTreeTable(model);
         treeTable.setRootVisible(false);
         treeTable.setShowsRootHandles(true);
@@ -202,6 +209,44 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
         content.add(new JScrollPane(treeTable), BorderLayout.CENTER);
         content.revalidate();
         content.repaint();
+
+        lookupObjectNames(roots, treeTable);
+    }
+
+    /** Names of the objects shown, looked up in the background; the table shows the ids meanwhile */
+    private void lookupObjectNames(List<LockTree.Node> roots, JXTreeTable treeTable) {
+        if (objectNames == null || !objectNames.isAvailable()) {
+            return;
+        }
+        List<String> ids = new ArrayList<>();
+        roots.forEach(r -> collectObjects(r, ids));
+        List<String> missing = objectNames.missing(ids);
+        if (missing.isEmpty()) {
+            return;
+        }
+        int gen = generation.get();
+        objectsLabel.setText(Labels.getLabel("gui.lock.objects.loading"));
+        Thread t = new Thread(() -> {
+            String error = objectNames.lookup(missing);
+            SwingUtilities.invokeLater(() -> {
+                if (generation.get() != gen) {
+                    return;
+                }
+                objectsLabel.setText(error == null ? "" : Labels.getLabel("gui.lock.objects.error") + " " + error);
+                TableColumn column = treeTable.getColumnModel().getColumn(
+                        treeTable.convertColumnIndexToView(LockTreeModel.COL_OBJECT));
+                treeTable.packColumn(treeTable.convertColumnIndexToView(LockTreeModel.COL_OBJECT), 6);
+                column.setPreferredWidth(Math.min(column.getPreferredWidth(), MAX_COLUMN_WIDTH));
+                treeTable.repaint();
+            });
+        }, "lock-tree-objects");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static void collectObjects(LockTree.Node node, List<String> ids) {
+        ids.add(node.getObject());
+        node.getChildren().forEach(c -> collectObjects(c, ids));
     }
 
     /** Right click: filter by the session, its waiters or the value of the cell */
@@ -225,7 +270,8 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
             }
 
             String colName = LockTreeModel.filterColumn(modelCol, iProfile);
-            Object value = treeTable.getValueAt(row, col);
+            // the object column may show the name: filter by the id
+            Object value = modelCol == LockTreeModel.COL_OBJECT ? node.getObject() : treeTable.getValueAt(row, col);
             if (colName == null || value == null || String.valueOf(value).isEmpty()) {
                 return null;
             }
@@ -258,11 +304,13 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
                 "object", "user", "program", "machine", "module", "first", "last"};
 
         private final List<LockTree.Node> roots;
+        private final ObjectNames objectNames;
         private final SimpleDateFormat timeFormat;
 
-        LockTreeModel(List<LockTree.Node> roots) {
+        LockTreeModel(List<LockTree.Node> roots, ObjectNames objectNames) {
             super(new Object());
             this.roots = roots;
+            this.objectNames = objectNames;
             long first = roots.stream().mapToLong(LockTree.Node::getFirst).min().orElse(0);
             long last = roots.stream().mapToLong(LockTree.Node::getLast).max().orElse(0);
             boolean sameDay = new SimpleDateFormat("yyyyMMdd").format(new Date(first))
@@ -311,10 +359,7 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
             }
             LockTree.Node n = (LockTree.Node) node;
             switch (column) {
-                case COL_SESSION:
-                    // the serial of an inactive blocker is unknown (the SID may belong to another session at other times)
-                    boolean serialKnown = !n.getSerial().isEmpty() && (!n.isRoot() || n.getActiveWhileBlocking() > 0);
-                    return serialKnown ? n.getSid() + "," + n.getSerial() : n.getSid();
+                case COL_SESSION: return n.getSerial().isEmpty() ? n.getSid() : n.getSid() + "," + n.getSerial();
                 case COL_STATE: return state(n);
                 case COL_WAIT: return n.isRoot() ? null : n.getWaitSamples();
                 case COL_CAUSED: return n.getCausedSamples() == 0 ? null : n.getCausedSamples();
@@ -325,11 +370,19 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
                 case COL_MODULE: return n.getModule();
                 case COL_SQL_ID: return n.getSqlId();
                 case COL_EVENT: return n.getEvent();
-                case COL_OBJECT: return "-1".equals(n.getObject()) ? "" : n.getObject();
+                case COL_OBJECT: return objectName(n.getObject());
                 case COL_FIRST: return n.getFirst() == Long.MAX_VALUE ? "" : timeFormat.format(new Date(n.getFirst()));
                 case COL_LAST: return n.getLast() == Long.MIN_VALUE ? "" : timeFormat.format(new Date(n.getLast()));
                 default: return null;
             }
+        }
+
+        private String objectName(String id) {
+            if ("-1".equals(id)) {
+                return "";
+            }
+            String name = objectNames == null ? null : objectNames.get(id);
+            return name == null ? id : name;
         }
 
         private static String state(LockTree.Node n) {

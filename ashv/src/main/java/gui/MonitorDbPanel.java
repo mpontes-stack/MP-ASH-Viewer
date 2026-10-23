@@ -18,6 +18,7 @@ import gui.filter.FilterBar;
 import gui.snapshot.SnapshotPanel;
 import remote.RemoteDBManager;
 import gui.gantt.MonitorGantt2;
+import core.lock.ObjectNames;
 import gui.lock.LockTreePanel;
 import gui.table.RawDataTable;
 import gui.util.ProgressBarUtil;
@@ -69,6 +70,7 @@ public class MonitorDbPanel {
     private MonitorGantt2 monitorGantt20;
     private RawDataTable rawDataTable20;
     private LockTreePanel lockTreePanel;
+    private ObjectNames objectNames;
 
     @Getter @Setter private ConnProfile connProfile;
     @Getter @Setter private IProfile iProfile;
@@ -122,7 +124,9 @@ public class MonitorDbPanel {
         mainGanttAndRaw.add("Top sql & sessions", chartDatasetManager.getMainNameChartDataset().getMonitorGantt2());
         mainGanttAndRaw.add("Raw data", chartDatasetManager.getMainNameChartDataset().getRawDataTable());
         mainGanttAndRaw.add("ASH Report", chartDatasetManager.getMainNameChartDataset().getAshReport());
-        lockTreePanel = new LockTreePanel(storeManager, ashFilter, getFromRemoteAndStore::getMainChartRange, true);
+        objectNames = new ObjectNames(remoteDBManager, connProfile.getProfileName());
+        lockTreePanel = new LockTreePanel(storeManager, ashFilter, getFromRemoteAndStore::getMainChartRange,
+                objectNames, true);
         chartDatasetManager.getMainNameChartDataset().getStackChartPanel().addChartListenerReleaseMouse(lockTreePanel);
         mainGanttAndRaw.add(Labels.getLabel("gui.lock.tab"), lockTreePanel);
 
@@ -364,6 +368,7 @@ public class MonitorDbPanel {
 
         historyPanel = new HistoryPanel(jFrame, colorManager, storeManager, getFromRemoteAndStore, chartDatasetManager);
         historyPanel.setAshFilter(ashFilter, filteredAshLoader);
+        historyPanel.setObjectNames(objectNames);
 
         Map<String, JRadioButton> mapRadioButton = new LinkedHashMap<>();
 
