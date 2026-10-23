@@ -15,6 +15,8 @@ import gui.chart.ChartDatasetManager;
 import gui.chart.GroupByChart;
 import gui.chart.panel.NameChartDataset;
 import gui.filter.FilterBar;
+import gui.snapshot.SnapshotPanel;
+import remote.RemoteDBManager;
 import gui.gantt.MonitorGantt2;
 import gui.table.RawDataTable;
 import gui.util.ProgressBarUtil;
@@ -54,6 +56,8 @@ public class MonitorDbPanel {
     private AshFilter ashFilter;
     private FilteredAshLoader filteredAshLoader;
     private FilterPresets filterPresets;
+    private RemoteDBManager remoteDBManager;
+    private SnapshotPanel snapshotPanel;
 
     private JSplitPane topActivitySplitPane;
     private JSplitPane detailSplitPane;
@@ -79,7 +83,8 @@ public class MonitorDbPanel {
                           ChartDatasetManager chartDatasetManager,
                           AshFilter ashFilter,
                           FilteredAshLoader filteredAshLoader,
-                          FilterPresets filterPresets) {
+                          FilterPresets filterPresets,
+                          RemoteDBManager remoteDBManager) {
         this.jFrame = jFrame;
         this.colorManager = colorManager;
         this.storeManager = storeManager;
@@ -89,6 +94,7 @@ public class MonitorDbPanel {
         this.ashFilter = ashFilter;
         this.filteredAshLoader = filteredAshLoader;
         this.filterPresets = filterPresets;
+        this.remoteDBManager = remoteDBManager;
 
         this.ashFilter.addListener(() -> ProgressBarUtil.runProgressDialog(
                 getFromRemoteAndStore::refreshMainChart, jFrame, Labels.getLabel("gui.filter.applying")));
@@ -136,6 +142,8 @@ public class MonitorDbPanel {
 
     public void adddGui(){
         mainTabbedPane.add("Top Activity", topActivitySplitPane);
+        snapshotPanel = new SnapshotPanel(remoteDBManager, connProfile.getProfileName());
+        mainTabbedPane.add(Labels.getLabel("gui.snapshot.tab"), snapshotPanel);
         // Detail tab is hidden by default (Top Activity "group by" covers it); -Dashv.detailtab=true shows it
         if (Boolean.getBoolean("ashv.detailtab")) {
             mainTabbedPane.add("Detail", detailSplitPane);
