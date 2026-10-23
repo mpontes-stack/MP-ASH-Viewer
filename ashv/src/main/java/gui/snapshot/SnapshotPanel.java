@@ -46,6 +46,20 @@ import remote.RemoteDBManager;
  */
 @Slf4j
 public class SnapshotPanel extends JPanel {
+    /** Sessions: who is doing what (locks, rollback, long operations, jobs); resources: is something running out */
+    public enum Page {SESSIONS, RESOURCES}
+
+    private static final List<String> SESSIONS_QUERIES = java.util.Arrays.asList(
+            OracleSnapshotQueries.HEADER, OracleSnapshotQueries.SESSIONS_BY_TYPE, OracleSnapshotQueries.SESSIONS_USER,
+            OracleSnapshotQueries.LOCKS, OracleSnapshotQueries.ROLLBACK_SESSIONS, OracleSnapshotQueries.ROLLBACK_SMON,
+            OracleSnapshotQueries.LONGOPS, OracleSnapshotQueries.JOBS);
+    private static final List<String> RESOURCES_QUERIES = java.util.Arrays.asList(
+            OracleSnapshotQueries.HEADER, OracleSnapshotQueries.LIMITS, OracleSnapshotQueries.PGA_STAT,
+            OracleSnapshotQueries.PGA_LIMIT, OracleSnapshotQueries.PGA_TOP, OracleSnapshotQueries.TEMP_FREE,
+            OracleSnapshotQueries.TEMP_TOP, OracleSnapshotQueries.UNDO_STAT, OracleSnapshotQueries.FRA,
+            OracleSnapshotQueries.FRA_USAGE, OracleSnapshotQueries.DG_STANDBY, OracleSnapshotQueries.DG_DESTINATIONS,
+            OracleSnapshotQueries.TABLESPACES);
+
     static final double WARN_PCT = 85;
     static final double CRITICAL_PCT = 95;
 
@@ -55,6 +69,8 @@ public class SnapshotPanel extends JPanel {
 
     private final SnapshotService service;
     private final boolean isOracle;
+    private final Page page;
+    private JPanel content;
 
     private final JButton refreshButton = new JButton(Labels.getLabel("gui.snapshot.refresh"));
     private final JComboBox<String> autoBox = new JComboBox<>();
@@ -128,8 +144,9 @@ public class SnapshotPanel extends JPanel {
     private final Timer timer;
     private long lastRefresh = 0;
 
-    public SnapshotPanel(RemoteDBManager remoteDBManager, String profileName) {
+    public SnapshotPanel(RemoteDBManager remoteDBManager, String profileName, Page page) {
         super(new BorderLayout());
+        this.page = page;
         this.service = new SnapshotService(remoteDBManager);
         this.isOracle = profileName != null && profileName.toLowerCase().startsWith("oracle");
 
@@ -192,38 +209,42 @@ public class SnapshotPanel extends JPanel {
         sessionsTop.add(new JLabel(Labels.getLabel("gui.snapshot.sessions.group")));
         sessionsTop.add(sessionsGroupBox);
 
-        JPanel content = new JPanel(new MigLayout("fillx, ins 8", "[grow, fill, sg col][grow, fill, sg col]", ""));
+        content = new JPanel(new MigLayout("fillx, ins 8, hidemode 3", "[grow, fill, sg col][grow, fill, sg col]", ""));
         headerLbl.setFont(headerLbl.getFont().deriveFont(headerLbl.getFont().getSize2D() + 1f));
         content.add(headerLbl, "span 2, wrap, gapbottom 6");
 
-        JScrollPane limitsTable = table(limitsModel, 5, true);
-        javax.swing.table.DefaultTableCellRenderer right = new javax.swing.table.DefaultTableCellRenderer();
-        right.setHorizontalAlignment(SwingConstants.RIGHT);
-        ((JXTable) limitsTable.getViewport().getView()).getColumnExt(3).setCellRenderer(right); // limit: number or UNLIMITED
+        if (page == Page.SESSIONS) {
+            content.add(section(Labels.getLabel("gui.snapshot.sessions"), sessionsSummary,
+                    table(sessionsTypeModel, 4, false), sessionsTop, table(sessionsTopModel, 8, false)), "top");
+            content.add(section(Labels.getLabel("gui.snapshot.jobs"), jobsSummary,
+                    collapsible(table(jobsModel, 8, false))), "top, wrap");
+            content.add(section(Labels.getLabel("gui.snapshot.locks"), locksSummary,
+                    collapsible(table(locksModel, 10, false))), "span 2, wrap");
+            content.add(section(Labels.getLabel("gui.snapshot.rollback"), rollbackSummary,
+                    collapsible(table(rollbackModel, 5, false)), smonSummary,
+                    collapsible(table(smonModel, 4, true, true))), "span 2, wrap");
+            content.add(section(Labels.getLabel("gui.snapshot.longops"), longopsSummary,
+                    collapsible(table(longopsModel, 6, true, true))), "span 2, wrap");
+        } else {
+            JScrollPane limitsTable = table(limitsModel, 4, true);
+            javax.swing.table.DefaultTableCellRenderer right = new javax.swing.table.DefaultTableCellRenderer();
+            right.setHorizontalAlignment(SwingConstants.RIGHT);
+            ((JXTable) limitsTable.getViewport().getView()).getColumnExt(3).setCellRenderer(right); // limit: number or UNLIMITED
 
-        content.add(section(Labels.getLabel("gui.snapshot.sessions"), sessionsSummary,
-                table(sessionsTypeModel, 4, false), sessionsTop, table(sessionsTopModel, 10, false)), "top");
-        content.add(section(Labels.getLabel("gui.snapshot.limits"), limitsSummary, limitsTable), "top, wrap");
-        content.add(section(Labels.getLabel("gui.snapshot.locks"), locksSummary,
-                table(locksModel, 6, false)), "span 2, wrap");
-        content.add(section(Labels.getLabel("gui.snapshot.rollback"), rollbackSummary,
-                table(rollbackModel, 4, false), smonSummary, table(smonModel, 3, true, true)), "span 2, wrap");
-        content.add(section(Labels.getLabel("gui.snapshot.longops"), longopsSummary,
-                table(longopsModel, 4, true, true)), "span 2, wrap");
-        content.add(section(Labels.getLabel("gui.snapshot.jobs"), jobsSummary,
-                table(jobsModel, 4, false)), "span 2, wrap");
-        content.add(section(Labels.getLabel("gui.snapshot.temp"), tempSummary,
-                table(tempModel, 5, false)), "top");
-        undoSummary.setVerticalAlignment(SwingConstants.TOP);
-        content.add(section(Labels.getLabel("gui.snapshot.undo"), undoSummary), "top, wrap");
-        content.add(section(Labels.getLabel("gui.snapshot.fra"), fraSummary,
-                table(fraModel, 5, true)), "top");
-        dgSection = section(Labels.getLabel("gui.snapshot.dataguard"), dgSummary, table(dgModel, 5, false));
-        content.add(dgSection, "top, wrap, hidemode 2");
-        content.add(section(Labels.getLabel("gui.snapshot.pga"), pgaSummary,
-                table(pgaTopModel, 12, false)), "span 2, wrap");
-        content.add(section(Labels.getLabel("gui.snapshot.tablespaces"), tsSummary,
-                table(tsModel, 12, true)), "span 2, wrap");
+            content.add(section(Labels.getLabel("gui.snapshot.limits"), limitsSummary, limitsTable), "top");
+            undoSummary.setVerticalAlignment(SwingConstants.TOP);
+            content.add(section(Labels.getLabel("gui.snapshot.undo"), undoSummary), "top, wrap");
+            content.add(section(Labels.getLabel("gui.snapshot.temp"), tempSummary,
+                    collapsible(table(tempModel, 5, false))), "top");
+            content.add(section(Labels.getLabel("gui.snapshot.fra"), fraSummary,
+                    collapsible(table(fraModel, 5, true))), "top, wrap");
+            dgSection = section(Labels.getLabel("gui.snapshot.dataguard"), dgSummary, table(dgModel, 4, false));
+            content.add(dgSection, "span 2, wrap");
+            content.add(section(Labels.getLabel("gui.snapshot.pga"), pgaSummary,
+                    table(pgaTopModel, 8, false)), "span 2, wrap");
+            content.add(section(Labels.getLabel("gui.snapshot.tablespaces"), tsSummary,
+                    table(tsModel, 12, true)), "span 2, wrap");
+        }
 
         JScrollPane scroll = new JScrollPane(content);
         scroll.setBorder(BorderFactory.createEmptyBorder());
@@ -255,7 +276,14 @@ public class SnapshotPanel extends JPanel {
         new SwingWorker<Map<String, SnapshotService.Result>, Void>() {
             @Override
             protected Map<String, SnapshotService.Result> doInBackground() {
-                return service.run(OracleSnapshotQueries.queries(), OracleSnapshotQueries.views());
+                List<String> keys = page == Page.SESSIONS ? SESSIONS_QUERIES : RESOURCES_QUERIES;
+                Map<String, String> queries = new java.util.LinkedHashMap<>();
+                OracleSnapshotQueries.queries().forEach((k, q) -> {
+                    if (keys.contains(k)) {
+                        queries.put(k, q);
+                    }
+                });
+                return service.run(queries, OracleSnapshotQueries.views());
             }
 
             @Override
@@ -279,19 +307,63 @@ public class SnapshotPanel extends JPanel {
 
     private void render(Map<String, SnapshotService.Result> r) {
         renderHeader(r.get(OracleSnapshotQueries.HEADER));
-        renderSessions(r.get(OracleSnapshotQueries.SESSIONS_BY_TYPE), r.get(OracleSnapshotQueries.SESSIONS_USER));
-        renderLimits(r.get(OracleSnapshotQueries.LIMITS));
-        renderLocks(r.get(OracleSnapshotQueries.LOCKS));
-        renderRollback(r.get(OracleSnapshotQueries.ROLLBACK_SESSIONS), r.get(OracleSnapshotQueries.ROLLBACK_SMON));
-        renderLongops(r.get(OracleSnapshotQueries.LONGOPS));
-        renderJobs(r.get(OracleSnapshotQueries.JOBS));
-        renderTemp(r.get(OracleSnapshotQueries.TEMP_FREE), r.get(OracleSnapshotQueries.TEMP_TOP));
-        renderUndo(r.get(OracleSnapshotQueries.UNDO_STAT));
-        renderFra(r.get(OracleSnapshotQueries.FRA), r.get(OracleSnapshotQueries.FRA_USAGE));
-        renderDataGuard(r.get(OracleSnapshotQueries.DG_STANDBY), r.get(OracleSnapshotQueries.DG_DESTINATIONS));
-        renderPga(r.get(OracleSnapshotQueries.PGA_STAT), r.get(OracleSnapshotQueries.PGA_LIMIT), r.get(OracleSnapshotQueries.PGA_TOP));
-        renderTablespaces(r.get(OracleSnapshotQueries.TABLESPACES));
+        if (page == Page.SESSIONS) {
+            renderSessions(r.get(OracleSnapshotQueries.SESSIONS_BY_TYPE), r.get(OracleSnapshotQueries.SESSIONS_USER));
+            renderLocks(r.get(OracleSnapshotQueries.LOCKS));
+            renderRollback(r.get(OracleSnapshotQueries.ROLLBACK_SESSIONS), r.get(OracleSnapshotQueries.ROLLBACK_SMON));
+            renderLongops(r.get(OracleSnapshotQueries.LONGOPS));
+            renderJobs(r.get(OracleSnapshotQueries.JOBS));
+        } else {
+            renderLimits(r.get(OracleSnapshotQueries.LIMITS));
+            renderTemp(r.get(OracleSnapshotQueries.TEMP_FREE), r.get(OracleSnapshotQueries.TEMP_TOP));
+            renderUndo(r.get(OracleSnapshotQueries.UNDO_STAT));
+            renderFra(r.get(OracleSnapshotQueries.FRA), r.get(OracleSnapshotQueries.FRA_USAGE));
+            renderDataGuard(r.get(OracleSnapshotQueries.DG_STANDBY), r.get(OracleSnapshotQueries.DG_DESTINATIONS));
+            renderPga(r.get(OracleSnapshotQueries.PGA_STAT), r.get(OracleSnapshotQueries.PGA_LIMIT), r.get(OracleSnapshotQueries.PGA_TOP));
+            renderTablespaces(r.get(OracleSnapshotQueries.TABLESPACES));
+        }
         tables.forEach(JXTable::packAll);
+        fitTables();
+    }
+
+    /**
+     * Table height follows its rows (up to the configured maximum); collapsible tables are hidden when empty
+     */
+    private void fitTables() {
+        for (TableBox box : tableBoxes) {
+            int rows = box.model.getRowCount();
+            box.scroll.setVisible(!(box.collapsible && rows == 0));
+            int shown = Math.max(box.collapsible ? 1 : 2, Math.min(rows, box.maxRows));
+            JXTable t = (JXTable) box.scroll.getViewport().getView();
+            int header = t.getTableHeader() == null ? 24 : t.getTableHeader().getPreferredSize().height;
+            box.scroll.setPreferredSize(new Dimension(200, t.getRowHeight() * shown + header + 4));
+        }
+        if (content != null) {
+            content.revalidate();
+            content.repaint();
+        }
+    }
+
+    private static class TableBox {
+        final DefaultTableModel model;
+        final JScrollPane scroll;
+        final int maxRows;
+        boolean collapsible;
+
+        TableBox(DefaultTableModel model, JScrollPane scroll, int maxRows) {
+            this.model = model;
+            this.scroll = scroll;
+            this.maxRows = maxRows;
+        }
+    }
+
+    private final List<TableBox> tableBoxes = new ArrayList<>();
+
+    /** Mark a table to be hidden when it has no rows (the summary line says "none") */
+    private JScrollPane collapsible(JScrollPane scroll) {
+        tableBoxes.stream().filter(b -> b.scroll == scroll).forEach(b -> b.collapsible = true);
+        scroll.setVisible(false);
+        return scroll;
     }
 
     private void renderHeader(SnapshotService.Result r) {
@@ -824,7 +896,7 @@ public class SnapshotPanel extends JPanel {
     /* ---------- components ---------- */
 
     private JPanel section(String title, JLabel summary, JComponent... body) {
-        JPanel panel = new JPanel(new MigLayout("fillx, ins 4", "[grow, fill]", ""));
+        JPanel panel = new JPanel(new MigLayout("fillx, ins 4, hidemode 3", "[grow, fill]", ""));
         JLabel titleLbl = new JLabel(title);
         titleLbl.setFont(titleLbl.getFont().deriveFont(Font.BOLD));
         titleLbl.setForeground(UIManager.getColor("Component.accentColor") != null
@@ -857,6 +929,7 @@ public class SnapshotPanel extends JPanel {
 
         JScrollPane scroll = new JScrollPane(table);
         scroll.setPreferredSize(new Dimension(200, table.getRowHeight() * visibleRows + 28));
+        tableBoxes.add(new TableBox(model, scroll, visibleRows));
         return scroll;
     }
 

@@ -57,7 +57,6 @@ public class MonitorDbPanel {
     private FilteredAshLoader filteredAshLoader;
     private FilterPresets filterPresets;
     private RemoteDBManager remoteDBManager;
-    private SnapshotPanel snapshotPanel;
 
     private JSplitPane topActivitySplitPane;
     private JSplitPane detailSplitPane;
@@ -142,8 +141,10 @@ public class MonitorDbPanel {
 
     public void adddGui(){
         mainTabbedPane.add("Top Activity", topActivitySplitPane);
-        snapshotPanel = new SnapshotPanel(remoteDBManager, connProfile.getProfileName());
-        mainTabbedPane.add(Labels.getLabel("gui.snapshot.tab"), snapshotPanel);
+        mainTabbedPane.add(Labels.getLabel("gui.snapshot.tab.sessions"),
+                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.SESSIONS));
+        mainTabbedPane.add(Labels.getLabel("gui.snapshot.tab.resources"),
+                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.RESOURCES));
         // Detail tab is hidden by default (Top Activity "group by" covers it); -Dashv.detailtab=true shows it
         if (Boolean.getBoolean("ashv.detailtab")) {
             mainTabbedPane.add("Detail", detailSplitPane);
