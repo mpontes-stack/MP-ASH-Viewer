@@ -92,7 +92,31 @@ public class SnapshotPanel extends JPanel {
             "gui.snapshot.col.rate", "gui.snapshot.col.eta");
     private final JLabel smonSummary = new JLabel(" ");
     private final DefaultTableModel smonModel = model("gui.snapshot.col.usn", "gui.snapshot.col.state",
-            "gui.snapshot.col.done", "gui.snapshot.col.total.blocks", "gui.snapshot.col.eta", "gui.snapshot.col.pct");
+            "gui.snapshot.col.done", "gui.snapshot.col.total.blocks", "gui.snapshot.col.eta", "gui.snapshot.col.pct.done");
+
+    private final JLabel longopsSummary = new JLabel(" ");
+    private final DefaultTableModel longopsModel = model("gui.snapshot.col.sid", "gui.snapshot.col.serial",
+            "gui.snapshot.col.username", "gui.snapshot.col.operation", "gui.snapshot.col.target", "gui.snapshot.col.elapsed",
+            "gui.snapshot.col.remaining", "gui.snapshot.col.sqlid", "gui.snapshot.col.pct.done");
+
+    private final JLabel jobsSummary = new JLabel(" ");
+    private final DefaultTableModel jobsModel = model("gui.snapshot.col.owner", "gui.snapshot.col.job",
+            "gui.snapshot.col.sid", "gui.snapshot.col.elapsed", "gui.snapshot.col.event", "gui.snapshot.col.sqlid");
+
+    private final JLabel tempSummary = new JLabel(" ");
+    private final DefaultTableModel tempModel = model("gui.snapshot.col.sid", "gui.snapshot.col.username",
+            "gui.snapshot.col.status", "gui.snapshot.col.program", "gui.snapshot.col.sqlid", "gui.snapshot.col.segtype",
+            "gui.snapshot.col.mb");
+
+    private final JLabel undoSummary = new JLabel(" ");
+
+    private final JLabel fraSummary = new JLabel(" ");
+    private final DefaultTableModel fraModel = model("gui.snapshot.col.file.type", "gui.snapshot.col.reclaimable",
+            "gui.snapshot.col.files", "gui.snapshot.col.pct");
+
+    private final JLabel dgSummary = new JLabel(" ");
+    private final DefaultTableModel dgModel = new ReadOnlyModel();
+    private JPanel dgSection;
 
     // previous undo blocks to estimate rollback speed: key -> {blocks, time ms}
     private Map<String, long[]> previousUndo = new HashMap<>();
@@ -183,7 +207,19 @@ public class SnapshotPanel extends JPanel {
         content.add(section(Labels.getLabel("gui.snapshot.locks"), locksSummary,
                 table(locksModel, 6, false)), "span 2, wrap");
         content.add(section(Labels.getLabel("gui.snapshot.rollback"), rollbackSummary,
-                table(rollbackModel, 4, false), smonSummary, table(smonModel, 3, true)), "span 2, wrap");
+                table(rollbackModel, 4, false), smonSummary, table(smonModel, 3, true, true)), "span 2, wrap");
+        content.add(section(Labels.getLabel("gui.snapshot.longops"), longopsSummary,
+                table(longopsModel, 4, true, true)), "span 2, wrap");
+        content.add(section(Labels.getLabel("gui.snapshot.jobs"), jobsSummary,
+                table(jobsModel, 4, false)), "span 2, wrap");
+        content.add(section(Labels.getLabel("gui.snapshot.temp"), tempSummary,
+                table(tempModel, 5, false)), "top");
+        undoSummary.setVerticalAlignment(SwingConstants.TOP);
+        content.add(section(Labels.getLabel("gui.snapshot.undo"), undoSummary), "top, wrap");
+        content.add(section(Labels.getLabel("gui.snapshot.fra"), fraSummary,
+                table(fraModel, 5, true)), "top");
+        dgSection = section(Labels.getLabel("gui.snapshot.dataguard"), dgSummary, table(dgModel, 5, false));
+        content.add(dgSection, "top, wrap, hidemode 2");
         content.add(section(Labels.getLabel("gui.snapshot.pga"), pgaSummary,
                 table(pgaTopModel, 12, false)), "span 2, wrap");
         content.add(section(Labels.getLabel("gui.snapshot.tablespaces"), tsSummary,
@@ -247,6 +283,12 @@ public class SnapshotPanel extends JPanel {
         renderLimits(r.get(OracleSnapshotQueries.LIMITS));
         renderLocks(r.get(OracleSnapshotQueries.LOCKS));
         renderRollback(r.get(OracleSnapshotQueries.ROLLBACK_SESSIONS), r.get(OracleSnapshotQueries.ROLLBACK_SMON));
+        renderLongops(r.get(OracleSnapshotQueries.LONGOPS));
+        renderJobs(r.get(OracleSnapshotQueries.JOBS));
+        renderTemp(r.get(OracleSnapshotQueries.TEMP_FREE), r.get(OracleSnapshotQueries.TEMP_TOP));
+        renderUndo(r.get(OracleSnapshotQueries.UNDO_STAT));
+        renderFra(r.get(OracleSnapshotQueries.FRA), r.get(OracleSnapshotQueries.FRA_USAGE));
+        renderDataGuard(r.get(OracleSnapshotQueries.DG_STANDBY), r.get(OracleSnapshotQueries.DG_DESTINATIONS));
         renderPga(r.get(OracleSnapshotQueries.PGA_STAT), r.get(OracleSnapshotQueries.PGA_LIMIT), r.get(OracleSnapshotQueries.PGA_TOP));
         renderTablespaces(r.get(OracleSnapshotQueries.TABLESPACES));
         tables.forEach(JXTable::packAll);
@@ -499,6 +541,205 @@ public class SnapshotPanel extends JPanel {
                 : seconds >= 60 ? "~" + seconds / 60 + " min " + seconds % 60 + " s" : "~" + seconds + " s";
     }
 
+    /** row: sid, serial#, username, opname, target, sofar, totalwork, pct, elapsed_seconds, time_remaining, sql_id */
+    private void renderLongops(SnapshotService.Result r) {
+        longopsModel.setRowCount(0);
+        if (!r.isOk()) {
+            longopsSummary.setText(errorHtml(r));
+            return;
+        }
+        r.rows.forEach(row -> longopsModel.addRow(new Object[]{String.valueOf(num(row[0])), String.valueOf(num(row[1])),
+                str(row[2]), str(row[3]), str(row[4]), duration(num(row[8])),
+                row[9] == null ? "" : duration(num(row[9])), str(row[10]), dbl(row[7])}));
+        longopsSummary.setText(r.rows.isEmpty() ? Labels.getLabel("gui.snapshot.longops.none")
+                : "<html><b>" + r.rows.size() + " " + Labels.getLabel("gui.snapshot.longops.running") + "</b></html>");
+    }
+
+    /** row: owner, job_name, session_id, elapsed_s, event, sql_id */
+    private void renderJobs(SnapshotService.Result r) {
+        jobsModel.setRowCount(0);
+        if (!r.isOk()) {
+            jobsSummary.setText(errorHtml(r));
+            return;
+        }
+        r.rows.forEach(row -> jobsModel.addRow(new Object[]{str(row[0]), str(row[1]),
+                row[2] == null ? "" : String.valueOf(num(row[2])), duration(num(row[3])), str(row[4]), str(row[5])}));
+        jobsSummary.setText(r.rows.isEmpty() ? Labels.getLabel("gui.snapshot.jobs.none")
+                : "<html><b>" + r.rows.size() + " " + Labels.getLabel("gui.snapshot.jobs.running") + "</b></html>");
+    }
+
+    /**
+     * free row: tablespace_name, tablespace_size, free_space (bytes)
+     * top row: sid, serial#, username, status, machine, program, sql_id, tablespace, segtype, mb
+     */
+    private void renderTemp(SnapshotService.Result free, SnapshotService.Result top) {
+        if (!free.isOk()) {
+            tempSummary.setText(errorHtml(free));
+        } else {
+            StringBuilder sb = new StringBuilder("<html>");
+            for (Object[] row : free.rows) {
+                long size = num(row[1]);
+                long used = size - num(row[2]);
+                if (sb.length() > 6) {
+                    sb.append(" &nbsp;&bull;&nbsp; ");
+                }
+                sb.append(esc(row[0])).append(": <b>").append(bytes(used)).append("</b> ")
+                        .append(Labels.getLabel("gui.snapshot.of")).append(" ").append(bytes(size));
+                if (size > 0) {
+                    sb.append(" (").append(colorPct(used * 100.0 / size)).append(")");
+                }
+            }
+            tempSummary.setText(sb.append("</html>").toString());
+        }
+
+        tempModel.setRowCount(0);
+        if (!top.isOk()) {
+            if (free.isOk()) {
+                tempSummary.setText(errorHtml(top));
+            }
+            return;
+        }
+        top.rows.forEach(row -> tempModel.addRow(new Object[]{String.valueOf(num(row[0])), str(row[2]), str(row[3]),
+                str(row[5]), str(row[6]), str(row[8]), dbl(row[9])}));
+    }
+
+    /**
+     * Last v$undostat interval (10 min):
+     * begin, end, activeblks, unexpiredblks, expiredblks, tuned_undoretention, maxquerylen, maxqueryid, ssolderrcnt, nospaceerrcnt, block_size
+     */
+    private void renderUndo(SnapshotService.Result r) {
+        if (!r.isOk() || r.rows.isEmpty()) {
+            undoSummary.setText(errorHtml(r));
+            return;
+        }
+        Object[] row = r.rows.get(0);
+        long blockSize = parseLong(row[10]);
+        long ora1555 = num(row[8]);
+        long noSpace = num(row[9]);
+        String period = row[0] instanceof Date && row[1] instanceof Date
+                ? new SimpleDateFormat("HH:mm").format((Date) row[0]) + " - " + new SimpleDateFormat("HH:mm").format((Date) row[1]) : "";
+
+        undoSummary.setText("<html>" + Labels.getLabel("gui.snapshot.undo.period") + " " + period + "<br><br>"
+                + Labels.getLabel("gui.snapshot.undo.active") + ": <b>" + bytes(num(row[2]) * blockSize) + "</b><br>"
+                + Labels.getLabel("gui.snapshot.undo.unexpired") + ": <b>" + bytes(num(row[3]) * blockSize) + "</b><br>"
+                + Labels.getLabel("gui.snapshot.undo.expired") + ": <b>" + bytes(num(row[4]) * blockSize) + "</b><br>"
+                + Labels.getLabel("gui.snapshot.undo.retention") + ": <b>" + duration(num(row[5])) + "</b><br>"
+                + Labels.getLabel("gui.snapshot.undo.longest") + ": <b>" + duration(num(row[6])) + "</b>"
+                + (row[7] == null ? "" : " (SQL_ID " + esc(row[7]) + ")") + "<br>"
+                + "ORA-01555 (snapshot too old): " + countHtml(ora1555) + "<br>"
+                + Labels.getLabel("gui.snapshot.undo.nospace") + ": " + countHtml(noSpace)
+                + "</html>");
+    }
+
+    /**
+     * dest row: name, space_limit, space_used, space_reclaimable, number_of_files
+     * usage row: file_type, percent_space_used, percent_space_reclaimable, number_of_files
+     */
+    private void renderFra(SnapshotService.Result dest, SnapshotService.Result usage) {
+        fraModel.setRowCount(0);
+        if (!dest.isOk()) {
+            fraSummary.setText(errorHtml(dest));
+            return;
+        }
+        Object[] row = dest.rows.isEmpty() ? null : dest.rows.get(0);
+        long limit = row == null ? 0 : num(row[1]);
+        if (limit <= 0) {
+            fraSummary.setText(Labels.getLabel("gui.snapshot.fra.none"));
+            return;
+        }
+        long used = num(row[2]);
+        long reclaimable = num(row[3]);
+        fraSummary.setText("<html>" + esc(row[0]) + "<br>" + Labels.getLabel("gui.snapshot.fra.used") + ": <b>" + bytes(used)
+                + "</b> " + Labels.getLabel("gui.snapshot.of") + " " + bytes(limit) + " (" + colorPct(used * 100.0 / limit) + ")"
+                + " &nbsp;&bull;&nbsp; " + Labels.getLabel("gui.snapshot.fra.reclaimable") + ": <b>" + bytes(reclaimable) + "</b>"
+                + " &nbsp;&bull;&nbsp; " + Labels.getLabel("gui.snapshot.fra.real") + ": "
+                + colorPct((used - reclaimable) * 100.0 / limit) + "</html>");
+
+        if (usage.isOk()) {
+            usage.rows.forEach(u -> fraModel.addRow(new Object[]{str(u[0]), dbl(u[2]), num(u[3]), dbl(u[1])}));
+        }
+    }
+
+    /**
+     * Standby: transport / apply lag (v$dataguard_stats); primary: standby destinations (v$archive_dest_status).
+     * Hidden when the database has no Data Guard.
+     */
+    private void renderDataGuard(SnapshotService.Result standby, SnapshotService.Result destinations) {
+        boolean hasStandbyStats = standby.isOk() && !standby.rows.isEmpty();
+        boolean hasDestinations = destinations.isOk() && !destinations.rows.isEmpty();
+        boolean permissionError = (!standby.isOk() && standby.error.startsWith("sem permiss"))
+                || (!destinations.isOk() && destinations.error.startsWith("sem permiss"));
+
+        dgSection.setVisible(hasStandbyStats || hasDestinations || permissionError);
+        dgModel.setRowCount(0);
+
+        if (hasStandbyStats) {
+            dgModel.setColumnIdentifiers(new Object[]{Labels.getLabel("gui.snapshot.col.metric"),
+                    Labels.getLabel("gui.snapshot.col.value"), Labels.getLabel("gui.snapshot.col.computed")});
+            StringBuilder sb = new StringBuilder("<html>Standby &nbsp;&bull;&nbsp; ");
+            for (Object[] row : standby.rows) {
+                dgModel.addRow(new Object[]{str(row[0]), str(row[1]), str(row[2])});
+                if (!"apply finish time".equals(str(row[0]))) {
+                    long lag = intervalSeconds(str(row[1]));
+                    String color = lag >= 900 ? hex(criticalColor()) : lag >= 300 ? hex(warnColor()) : null;
+                    sb.append(esc(row[0])).append(": <b>")
+                            .append(color == null ? duration(lag) : "<font color='" + color + "'>" + duration(lag) + "</font>")
+                            .append("</b> &nbsp;&nbsp;");
+                }
+            }
+            dgSummary.setText(sb.append("</html>").toString());
+        } else if (hasDestinations) {
+            dgModel.setColumnIdentifiers(new Object[]{"DEST_ID", "DEST_NAME", "STATUS", "TYPE", "DATABASE_MODE",
+                    "RECOVERY_MODE", "GAP_STATUS", "ERROR"});
+            int problems = 0;
+            for (Object[] row : destinations.rows) {
+                dgModel.addRow(row);
+                String status = str(row[2]);
+                String gap = str(row[6]);
+                if (!"VALID".equals(status) || (!gap.isEmpty() && !"NO GAP".equals(gap)) || !str(row[7]).isEmpty()) {
+                    problems++;
+                }
+            }
+            dgSummary.setText("<html>" + Labels.getLabel("gui.snapshot.dg.primary") + " " + destinations.rows.size()
+                    + " " + Labels.getLabel("gui.snapshot.dg.destinations") + " &nbsp;&bull;&nbsp; "
+                    + (problems == 0 ? "<b>" + Labels.getLabel("gui.snapshot.dg.ok") + "</b>"
+                    : "<b><font color='" + hex(criticalColor()) + "'>" + problems + " "
+                    + Labels.getLabel("gui.snapshot.dg.problems") + "</font></b>") + "</html>");
+        } else if (permissionError) {
+            dgSummary.setText(errorHtml(standby.isOk() ? destinations : standby));
+        }
+    }
+
+    /** "+00 00:05:12" (day to second interval text) -> seconds */
+    private static long intervalSeconds(String text) {
+        try {
+            String t = text.trim().replace("+", "");
+            String[] dayTime = t.split(" ");
+            String[] hms = dayTime[dayTime.length - 1].split(":");
+            long days = dayTime.length > 1 ? Long.parseLong(dayTime[0]) : 0;
+            return days * 86400 + Long.parseLong(hms[0]) * 3600 + Long.parseLong(hms[1]) * 60
+                    + Math.round(Double.parseDouble(hms[2]));
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /** seconds -> "2d 3h", "1h 05min", "4min 10s", "12s" */
+    private static String duration(long seconds) {
+        if (seconds >= 86400) {
+            return seconds / 86400 + "d " + (seconds % 86400) / 3600 + "h";
+        } else if (seconds >= 3600) {
+            return seconds / 3600 + "h " + String.format("%02d", (seconds % 3600) / 60) + "min";
+        } else if (seconds >= 60) {
+            return seconds / 60 + "min " + seconds % 60 + "s";
+        }
+        return seconds + "s";
+    }
+
+    private static String countHtml(long count) {
+        return count > 0 ? "<b><font color='" + hex(criticalColor()) + "'>" + count + "</font></b>" : "<b>0</b>";
+    }
+
     private void renderPga(SnapshotService.Result stat, SnapshotService.Result limit, SnapshotService.Result top) {
         if (!stat.isOk()) {
             pgaSummary.setText(errorHtml(stat));
@@ -598,12 +839,19 @@ public class SnapshotPanel extends JPanel {
     }
 
     private JScrollPane table(DefaultTableModel model, int visibleRows, boolean hasPctColumn) {
+        return table(model, visibleRows, hasPctColumn, false);
+    }
+
+    /**
+     * @param isProgress last column is a progress (neutral color) instead of an occupation (85% / 95% alert colors)
+     */
+    private JScrollPane table(DefaultTableModel model, int visibleRows, boolean hasPctColumn, boolean isProgress) {
         JXTable table = new JXTable(model);
         table.setEditable(false);
         table.setColumnControlVisible(false);
         table.setHorizontalScrollEnabled(true);
         if (hasPctColumn) {
-            table.getColumnExt(model.getColumnCount() - 1).setCellRenderer(new PercentBarRenderer());
+            table.getColumnExt(model.getColumnCount() - 1).setCellRenderer(new PercentBarRenderer(isProgress));
         }
         tables.add(table);
 
@@ -641,9 +889,14 @@ public class SnapshotPanel extends JPanel {
      * Percentage with a horizontal bar: accent color, yellow from 85%, red from 95%
      */
     private static class PercentBarRenderer extends JComponent implements TableCellRenderer {
+        private final boolean isProgress;
         private Double pct;
         private boolean selected;
         private JTable table;
+
+        PercentBarRenderer(boolean isProgress) {
+            this.isProgress = isProgress;
+        }
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
@@ -669,7 +922,8 @@ public class SnapshotPanel extends JPanel {
             int barWidth = (int) Math.round(barArea * Math.min(100, Math.max(0, pct)) / 100.0);
             g.setColor(new Color(128, 128, 128, 40));
             g.fillRoundRect(2, 4, barArea, getHeight() - 8, 4, 4);
-            g.setColor(pct >= CRITICAL_PCT ? criticalColor() : pct >= WARN_PCT ? warnColor() : okColor());
+            g.setColor(isProgress ? progressColor()
+                    : pct >= CRITICAL_PCT ? criticalColor() : pct >= WARN_PCT ? warnColor() : okColor());
             g.fillRoundRect(2, 4, barWidth, getHeight() - 8, 4, 4);
 
             g.setColor(selected ? table.getSelectionForeground() : table.getForeground());
@@ -681,6 +935,7 @@ public class SnapshotPanel extends JPanel {
     /* ---------- formatting ---------- */
 
     static Color okColor() { return new Color(76, 145, 210); }
+    static Color progressColor() { return new Color(90, 170, 120); }
     static Color warnColor() { return new Color(230, 165, 40); }
     static Color criticalColor() { return new Color(220, 70, 60); }
 

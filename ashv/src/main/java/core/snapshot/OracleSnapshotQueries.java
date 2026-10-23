@@ -18,6 +18,15 @@ public final class OracleSnapshotQueries {
     public static final String LOCKS = "locks";
     public static final String ROLLBACK_SESSIONS = "rollbackSessions";
     public static final String ROLLBACK_SMON = "rollbackSmon";
+    public static final String LONGOPS = "longops";
+    public static final String JOBS = "jobs";
+    public static final String TEMP_FREE = "tempFree";
+    public static final String TEMP_TOP = "tempTop";
+    public static final String UNDO_STAT = "undoStat";
+    public static final String FRA = "fra";
+    public static final String FRA_USAGE = "fraUsage";
+    public static final String DG_STANDBY = "dgStandby";
+    public static final String DG_DESTINATIONS = "dgDestinations";
 
     private OracleSnapshotQueries() {}
 
@@ -62,6 +71,57 @@ public final class OracleSnapshotQueries {
                 "SELECT usn, state, undoblocksdone, undoblockstotal, "
                 + "ROUND(undoblocksdone * 100 / NULLIF(undoblockstotal, 0), 1) pct "
                 + "FROM v$fast_start_transactions WHERE state <> 'RECOVERED'");
+
+        q.put(LONGOPS,
+                "SELECT s.sid, s.serial#, s.username, l.opname, l.target, l.sofar, l.totalwork, "
+                + "ROUND(l.sofar * 100 / NULLIF(l.totalwork, 0), 1) pct, l.elapsed_seconds, l.time_remaining, s.sql_id "
+                + "FROM v$session_longops l, v$session s "
+                + "WHERE l.sid = s.sid AND l.serial# = s.serial# AND l.totalwork > 0 AND l.sofar < l.totalwork");
+
+        q.put(JOBS,
+                "SELECT r.owner, r.job_name, r.session_id, "
+                + "EXTRACT(DAY FROM r.elapsed_time) * 86400 + EXTRACT(HOUR FROM r.elapsed_time) * 3600 "
+                + "+ EXTRACT(MINUTE FROM r.elapsed_time) * 60 + ROUND(EXTRACT(SECOND FROM r.elapsed_time)) elapsed_s, "
+                + "s.event, s.sql_id "
+                + "FROM dba_scheduler_running_jobs r, v$session s "
+                + "WHERE r.session_id = s.sid(+) "
+                + "ORDER BY elapsed_s DESC");
+
+        q.put(TEMP_FREE,
+                "SELECT tablespace_name, tablespace_size, free_space FROM dba_temp_free_space");
+
+        q.put(TEMP_TOP,
+                "SELECT * FROM ("
+                + "SELECT s.sid, s.serial#, s.username, s.status, s.machine, s.program, s.sql_id, "
+                + "u.tablespace, u.segtype, ROUND(u.blocks * t.block_size / 1048576, 1) mb "
+                + "FROM v$tempseg_usage u, v$session s, dba_tablespaces t "
+                + "WHERE u.session_addr = s.saddr AND u.tablespace = t.tablespace_name "
+                + "ORDER BY u.blocks DESC) "
+                + "WHERE ROWNUM <= 10");
+
+        q.put(UNDO_STAT, // last 10 minutes interval
+                "SELECT * FROM ("
+                + "SELECT begin_time, end_time, activeblks, unexpiredblks, expiredblks, tuned_undoretention, "
+                + "maxquerylen, maxqueryid, ssolderrcnt, nospaceerrcnt, "
+                + "(SELECT value FROM v$parameter WHERE name = 'db_block_size') block_size "
+                + "FROM v$undostat ORDER BY begin_time DESC) "
+                + "WHERE ROWNUM = 1");
+
+        q.put(FRA,
+                "SELECT name, space_limit, space_used, space_reclaimable, number_of_files FROM v$recovery_file_dest");
+
+        q.put(FRA_USAGE,
+                "SELECT file_type, percent_space_used, percent_space_reclaimable, number_of_files "
+                + "FROM v$recovery_area_usage WHERE number_of_files > 0 OR percent_space_used > 0 "
+                + "ORDER BY percent_space_used DESC");
+
+        q.put(DG_STANDBY, // rows only on a standby
+                "SELECT name, value, time_computed FROM v$dataguard_stats "
+                + "WHERE name IN ('transport lag', 'apply lag', 'apply finish time') AND value IS NOT NULL");
+
+        q.put(DG_DESTINATIONS, // standby destinations of a primary
+                "SELECT dest_id, dest_name, status, type, database_mode, recovery_mode, gap_status, error "
+                + "FROM v$archive_dest_status WHERE status <> 'INACTIVE' AND type <> 'LOCAL'");
 
         q.put(PGA_STAT,
                 "SELECT name, value FROM v$pgastat "
@@ -108,6 +168,15 @@ public final class OracleSnapshotQueries {
         v.put(LOCKS, "V$SESSION, DBA_OBJECTS");
         v.put(ROLLBACK_SESSIONS, "V$TRANSACTION, V$SESSION, V$PARAMETER");
         v.put(ROLLBACK_SMON, "V$FAST_START_TRANSACTIONS");
+        v.put(LONGOPS, "V$SESSION_LONGOPS, V$SESSION");
+        v.put(JOBS, "DBA_SCHEDULER_RUNNING_JOBS, V$SESSION");
+        v.put(TEMP_FREE, "DBA_TEMP_FREE_SPACE");
+        v.put(TEMP_TOP, "V$TEMPSEG_USAGE, V$SESSION, DBA_TABLESPACES");
+        v.put(UNDO_STAT, "V$UNDOSTAT, V$PARAMETER");
+        v.put(FRA, "V$RECOVERY_FILE_DEST");
+        v.put(FRA_USAGE, "V$RECOVERY_AREA_USAGE");
+        v.put(DG_STANDBY, "V$DATAGUARD_STATS");
+        v.put(DG_DESTINATIONS, "V$ARCHIVE_DEST_STATUS");
         return v;
     }
 }
