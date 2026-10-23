@@ -185,6 +185,10 @@ public class SnapshotService {
                     Object[] row = new Object[columns.size()];
                     for (int i = 0; i < row.length; i++) {
                         row[i] = rs.getObject(i + 1);
+                        if (row[i] instanceof java.sql.Clob) { // read now: not valid after the connection goes back
+                            java.sql.Clob clob = (java.sql.Clob) row[i];
+                            row[i] = clob.getSubString(1, (int) clob.length());
+                        }
                     }
                     rows.add(row);
                 }

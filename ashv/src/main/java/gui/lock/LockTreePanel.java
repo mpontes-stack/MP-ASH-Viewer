@@ -7,6 +7,7 @@ import core.lock.LockTree;
 import core.lock.ObjectNames;
 import gui.filter.FilterPopup;
 import gui.util.CsvExport;
+import gui.util.SqlTextTooltip;
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -219,6 +220,8 @@ public class LockTreePanel extends JPanel implements IDetailPanel {
             column.setPreferredWidth(Math.min(column.getPreferredWidth(), MAX_COLUMN_WIDTH));
         }
         installFilterPopup(treeTable, iProfile);
+        SqlTextTooltip.install(treeTable, (row, col) -> treeTable.convertColumnIndexToModel(col) == LockTreeModel.COL_SQL_ID
+                ? String.valueOf(treeTable.getValueAt(row, col)) : null);
 
         content.removeAll();
         content.add(new JScrollPane(treeTable), BorderLayout.CENTER);

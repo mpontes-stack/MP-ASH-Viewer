@@ -29,6 +29,17 @@ public final class FilterPopup {
         return new AbstractMap.SimpleImmutableEntry<>(colName, value);
     }
 
+    private static final String MENU_ITEMS = "filterPopup.menuItems";
+
+    /**
+     * More items at the end of the menu installed by {@link #install} (e.g. copy the SQL text)
+     *
+     * @param itemsForCell (view row, view column) -> items, empty for none
+     */
+    public static void addMenuItems(JTable table, BiFunction<Integer, Integer, List<JMenuItem>> itemsForCell) {
+        table.putClientProperty(MENU_ITEMS, itemsForCell);
+    }
+
     /**
      * @param conditionsForCell (view row, view column) -> list of menu entries, each entry a list of
      *                          conditions applied together (e.g. SESSION_ID and SESSION_SERIAL#)
@@ -51,7 +62,14 @@ public final class FilterPopup {
                 table.changeSelection(row, col, false, false);
 
                 List<List<Map.Entry<String, String>>> entries = conditionsForCell.apply(row, col);
-                if (entries == null || entries.isEmpty()) {
+                if (entries == null) {
+                    entries = Collections.emptyList();
+                }
+                @SuppressWarnings("unchecked")
+                BiFunction<Integer, Integer, List<JMenuItem>> extra =
+                        (BiFunction<Integer, Integer, List<JMenuItem>>) table.getClientProperty(MENU_ITEMS);
+                List<JMenuItem> extraItems = extra == null ? Collections.emptyList() : extra.apply(row, col);
+                if (entries.isEmpty() && extraItems.isEmpty()) {
                     return;
                 }
 
@@ -93,6 +111,11 @@ public final class FilterPopup {
                         }
                     }
                 }
+
+                if (!entries.isEmpty() && !extraItems.isEmpty()) {
+                    menu.addSeparator();
+                }
+                extraItems.forEach(menu::add);
 
                 menu.show(e.getComponent(), e.getX(), e.getY());
             }

@@ -10,6 +10,7 @@ import gui.table.searchable.XMatchingTextHighlighter;
 import config.Labels;
 import gui.util.CsvExport;
 import gui.util.ProgressBarUtil;
+import gui.util.SqlTextTooltip;
 import lombok.Getter;
 import lombok.Setter;
 import org.jdesktop.swingx.JXCollapsiblePane;
@@ -186,6 +187,16 @@ public class RawDataTable extends JPanel implements IDetailPanel {
                                     FilterPopup.condition(colName, value == null ? "" : String.valueOf(value))));
                         });
                     }
+
+                    final JXTable sqlTable = table;
+                    SqlTextTooltip.install(sqlTable, (row, col) -> {
+                        String colName = sqlTable.getColumnName(col);
+                        if (!colName.equalsIgnoreCase(iProfile.getSqlIdColName()) && !colName.equalsIgnoreCase("PREV_SQL_ID")) {
+                            return null;
+                        }
+                        Object value = sqlTable.getValueAt(row, col);
+                        return value == null ? null : String.valueOf(value);
+                    });
 
                     MatchingTextHighlighter matchingTextMarker = new XMatchingTextHighlighter();
                     matchingTextMarker.setPainter(DecoratorFactory.createPlainPainter());

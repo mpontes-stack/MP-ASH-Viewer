@@ -19,6 +19,7 @@ import gui.snapshot.SnapshotPanel;
 import remote.RemoteDBManager;
 import gui.gantt.MonitorGantt2;
 import core.lock.ObjectNames;
+import core.sqltext.SqlTexts;
 import gui.lock.LockTreePanel;
 import gui.table.RawDataTable;
 import gui.util.ProgressBarUtil;
@@ -98,6 +99,7 @@ public class MonitorDbPanel {
         this.filteredAshLoader = filteredAshLoader;
         this.filterPresets = filterPresets;
         this.remoteDBManager = remoteDBManager;
+        SqlTexts.configure(storeManager, remoteDBManager);
 
         this.ashFilter.addListener(() -> ProgressBarUtil.runProgressDialog(
                 getFromRemoteAndStore::refreshMainChart, jFrame, Labels.getLabel("gui.filter.applying")));

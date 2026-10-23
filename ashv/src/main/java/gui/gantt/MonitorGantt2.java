@@ -19,6 +19,7 @@ import gui.detail.SqlDetail;
 import gui.filter.FilterPopup;
 import config.Labels;
 import gui.util.CsvExport;
+import gui.util.SqlTextTooltip;
 import gui.util.ProgressBarUtil;
 import lombok.Getter;
 import lombok.Setter;
@@ -187,6 +188,10 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         tableGanttSql.getJXTable().setCellSelectionEnabled(true);
 
         setDoubleClickForColSqlId(tableGanttSql.getJXTable(), 1); // Open SQL id detail for double click event
+
+        JXTable sqlTable = tableGanttSql.getJXTable();
+        SqlTextTooltip.install(sqlTable, (row, col) -> sqlTable.convertColumnIndexToModel(col) == 1
+                ? String.valueOf(sqlTable.getModel().getValueAt(sqlTable.convertRowIndexToModel(row), 1)) : null);
 
         if (ashFilter != null) {
             JXTable t = tableGanttSql.getJXTable();
