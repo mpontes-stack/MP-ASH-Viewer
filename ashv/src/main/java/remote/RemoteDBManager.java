@@ -24,6 +24,9 @@ public class RemoteDBManager {
     private ConnProfile connProfile;
     @Getter private BasicDataSource basicDataSource;
 
+    /** Timeout to get / open / validate a connection */
+    public static final int TIMEOUT_SECONDS = 15;
+
     @Inject
     public RemoteDBManager(ConfigurationManager configurationManager) {
         this.configurationManager = configurationManager;
@@ -40,6 +43,16 @@ public class RemoteDBManager {
             this.basicDataSource.setPassword(configurationManager.getPassword(configProfile));
             this.basicDataSource.setInitialSize(3);
             this.basicDataSource.setMaxTotal(5);
+
+            // Do not hang forever when the network is down
+            this.basicDataSource.setMaxWaitMillis(TIMEOUT_SECONDS * 1000L);       // wait for a free pooled connection
+            this.basicDataSource.setTestOnBorrow(true);                          // discard dead pooled connections...
+            this.basicDataSource.setValidationQueryTimeout(TIMEOUT_SECONDS);     // ...checked with isValid(timeout)
+            if (this.connProfile.getDriver() != null && this.connProfile.getDriver().toLowerCase().contains("oracle")) {
+                this.basicDataSource.addConnectionProperty("oracle.net.CONNECT_TIMEOUT", String.valueOf(TIMEOUT_SECONDS * 1000));
+            } else {
+                this.basicDataSource.addConnectionProperty("connectTimeout", String.valueOf(TIMEOUT_SECONDS)); // PostgreSQL
+            }
 
         } catch (Exception e) {
             log.error(e.toString());
