@@ -12,6 +12,8 @@ import core.manager.ConstantManager;
 import core.parameter.ParameterBuilder;
 import core.processing.GetFromRemoteAndStore;
 import gui.chart.ChartDatasetManager;
+import gui.chart.GroupByChart;
+import gui.chart.panel.NameChartDataset;
 import gui.filter.FilterBar;
 import gui.gantt.MonitorGantt2;
 import gui.table.RawDataTable;
@@ -115,9 +117,13 @@ public class MonitorDbPanel {
         mainGanttAndRaw.add("ASH Report", chartDatasetManager.getMainNameChartDataset().getAshReport());
 
         FilterBar filterBar = newFilterBar(getFromRemoteAndStore::getMainChartRange);
+        JPanel topActivityNorthPanel = new JPanel(new BorderLayout());
+        topActivityNorthPanel.add(createGroupByPanel(), BorderLayout.WEST);
+        topActivityNorthPanel.add(filterBar, BorderLayout.CENTER);
+
         JPanel topActivityChartPanel = new JPanel(new BorderLayout());
-        topActivityChartPanel.add(filterBar, BorderLayout.NORTH);
-        topActivityChartPanel.add(chartDatasetManager.getMainNameChartDataset().getStackChartPanel(), BorderLayout.CENTER);
+        topActivityChartPanel.add(topActivityNorthPanel, BorderLayout.NORTH);
+        topActivityChartPanel.add(chartCards, BorderLayout.CENTER);
 
         topActivitySplitPane.add(topActivityChartPanel, JSplitPane.TOP);
         topActivitySplitPane.add(mainGanttAndRaw, JSplitPane.BOTTOM);
@@ -136,6 +142,80 @@ public class MonitorDbPanel {
 
     public void addGuiHistory(){
         mainTabbedPane.add("History", controlMainDetailHistory);
+    }
+
+    // Columns for "group by" (shown when collected by the connection)
+    private static final String[] GROUP_BY_COLUMNS = {
+            "SQL_ID", "MODULE", "ACTION", "PROGRAM", "USERNAME", "OSUSER", "MACHINE", "SESSION_ID",
+            "SERVICE_NAME", "CLIENT_IDENTIFIER", "CLIENT_INFO", "EVENT", "COMMAND", "SESSION_TYPE",
+            "BLOCKING_SESSION", "FINAL_BLOCKING_SESSION", "PREV_SQL_ID", "SQL_HASH_VALUE",
+            "PLSQL_ENTRY_OBJECT_ID", "CURRENT_OBJ#"};
+
+    private JPanel chartCards;
+
+    /**
+     * "Group by" combo: wait class (original chart) or a raw data column (grouped chart)
+     */
+    private JPanel createGroupByPanel() {
+        NameChartDataset main = chartDatasetManager.getMainNameChartDataset();
+
+        GroupByChart groupByChart = new GroupByChart(storeManager, colorManager, ashFilter, filteredAshLoader,
+                getFromRemoteAndStore::getMainChartXValues);
+        groupByChart.getStackChartPanel().addChartListenerReleaseMouse(main.getMonitorGantt2());
+        groupByChart.getStackChartPanel().addChartListenerReleaseMouse(main.getRawDataTable());
+        groupByChart.getStackChartPanel().addChartListenerReleaseMouse(main.getAshReport());
+        getFromRemoteAndStore.setMainChartListener(groupByChart::refresh);
+
+        CardLayout cardLayout = new CardLayout();
+        chartCards = new JPanel(cardLayout);
+        chartCards.add(main.getStackChartPanel(), "waitclass");
+        chartCards.add(groupByChart.getStackChartPanel(), "groupby");
+
+        return newGroupByPanel(selected -> {
+            if (selected == null) {
+                groupByChart.setColName(null);
+                cardLayout.show(chartCards, "waitclass");
+            } else {
+                groupByChart.setColName(selected);
+                ProgressBarUtil.runProgressDialog(() -> groupByChart.refresh(true), jFrame,
+                        Labels.getLabel("gui.groupby.loading"));
+                cardLayout.show(chartCards, "groupby");
+            }
+        });
+    }
+
+    /**
+     * "Agrupar por" combo with the collected columns; null is passed for wait class
+     */
+    private JPanel newGroupByPanel(java.util.function.Consumer<String> onChange) {
+        java.util.List<String> available = new java.util.ArrayList<>();
+        java.util.List<config.profile.SqlColProfile> cols =
+                storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList();
+        if (cols != null) {
+            cols.forEach(c -> available.add(c.getColName()));
+        }
+
+        JComboBox<String> groupByBox = new JComboBox<>();
+        String waitClassItem = Labels.getLabel("gui.groupby.waitclass");
+        groupByBox.addItem(waitClassItem);
+        for (String col : GROUP_BY_COLUMNS) {
+            if (available.contains(col)) {
+                groupByBox.addItem(col);
+            }
+        }
+        groupByBox.setMaximumRowCount(GROUP_BY_COLUMNS.length + 1);
+        groupByBox.setToolTipText(Labels.getLabel("gui.groupby.tooltip"));
+
+        groupByBox.addActionListener(e -> {
+            String selected = (String) groupByBox.getSelectedItem();
+            onChange.accept(selected == null || selected.equals(waitClassItem) ? null : selected);
+        });
+
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
+        panel.add(new JLabel(Labels.getLabel("gui.groupby.label")));
+        panel.add(groupByBox);
+        panel.add(new JSeparator(SwingConstants.VERTICAL));
+        return panel;
     }
 
     private FilterBar newFilterBar(java.util.function.Supplier<long[]> rangeSupplier) {
@@ -382,7 +462,10 @@ public class MonitorDbPanel {
 
         JPanel historyNorthPanel = new JPanel(new BorderLayout());
         historyNorthPanel.add(mainStartEndDateTimePicker/*buttonPanel*/, BorderLayout.NORTH);
-        historyNorthPanel.add(newFilterBar(this::getHistoryRange), BorderLayout.SOUTH);
+        JPanel historyFilterPanel = new JPanel(new BorderLayout());
+        historyFilterPanel.add(newGroupByPanel(historyPanel::setGroupBy), BorderLayout.WEST);
+        historyFilterPanel.add(newFilterBar(this::getHistoryRange), BorderLayout.CENTER);
+        historyNorthPanel.add(historyFilterPanel, BorderLayout.SOUTH);
 
         controlMainDetailHistory.add(historyNorthPanel, BorderLayout.NORTH);
         controlMainDetailHistory.add(historyPanel, BorderLayout.CENTER);

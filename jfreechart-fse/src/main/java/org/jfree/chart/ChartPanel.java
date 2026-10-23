@@ -3515,6 +3515,9 @@ public class ChartPanel extends JPanel implements ChartChangeListener,
      * Send dLeft&dRight(timestamp) when mouse released
      */
     protected void fireReleaseMouse() {
+        if (getSelectionShape() == null) { // simple click without selection
+            return;
+        }
         PlotRenderingInfo plotInfo = this.info.getPlotInfo();
 
         Rectangle2D scaledDataArea = getScreenDataArea();

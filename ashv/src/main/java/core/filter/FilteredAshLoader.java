@@ -213,6 +213,51 @@ public class FilteredAshLoader {
     }
 
     /**
+     * Filtered samples by value of a column for each chart point: x -> (value -> number of samples).
+     * Each stored sample belongs to the point with the greatest x <= sample time, within {@code range} ms.
+     *
+     * @param xValues chart points in ascending order
+     */
+    public Map<Double, Map<String, Integer>> countByValue(AshFilter.Matcher matcher, String colName,
+                                                         List<Double> xValues, long range) {
+        Map<Double, Map<String, Integer>> out = new HashMap<>();
+
+        Optional<SqlColProfile> col = findCol(getColProfiles(), colName);
+        if (!col.isPresent() || xValues.isEmpty()) {
+            return out;
+        }
+
+        long[] xs = xValues.stream().mapToLong(Double::longValue).toArray();
+        long begin = xs[0];
+        long end = xs[xs.length - 1] + range;
+
+        EntityCursor<MainData> cursor = storeManager.getDatabaseDAO().getMainDataDAO().getPrimaryIndex()
+                .entities(begin, true, end, false);
+        try {
+            for (MainData sl : cursor) {
+                int idx = java.util.Arrays.binarySearch(xs, sl.getKey());
+                if (idx < 0) {
+                    idx = -idx - 2; // greatest x lower than the key
+                }
+                if (idx < 0 || sl.getKey() >= xs[idx] + range) {
+                    continue;
+                }
+                Map<String, Integer> byValue = out.computeIfAbsent(xValues.get(idx), k -> new HashMap<>());
+
+                for (int row = 0; row < sl.getMainMatrix().length; row++) {
+                    if (matcher.matches(sl, row)) {
+                        byValue.merge(matcher.getValue(col.get(), sl, row), 1, Integer::sum);
+                    }
+                }
+            }
+        } finally {
+            cursor.close();
+        }
+
+        return out;
+    }
+
+    /**
      * Sum of samples by wait class id from {@link #countByWaitClassAndEvent}
      */
     public static long[] toWaitClassArray(Map<String, Map<String, Integer>> byClassEvent, IProfile iProfile, int waitClassCount) {

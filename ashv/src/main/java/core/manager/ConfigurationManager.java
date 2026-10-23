@@ -20,11 +20,13 @@ import gui.model.EncryptionType;
 import gui.model.RegistryKey;
 import java.security.GeneralSecurityException;
 import java.util.AbstractMap;
+import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 import javax.crypto.SecretKey;
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -151,6 +153,7 @@ public class ConfigurationManager {
                 .olapRetainDays(String.valueOf(cfg.getValue().getOlapRetainDays()))
                 .containerType(cfg.getValue().getContainerType())
                 .encryptionType(cfg.getValue().getEncryptionType())
+                .groupName(cfg.getValue().getGroupName() == null ? "" : cfg.getValue().getGroupName())
                 .build();
     }
 
@@ -185,8 +188,44 @@ public class ConfigurationManager {
         cfg.getValue().setOlapRetainDays(getOlapRetainDays());
         cfg.getValue().setEncryptionType(connIn.getEncryptionType());
         cfg.getValue().setContainerType(connIn.getContainerType());
+        cfg.getValue().setGroupName(normalizeGroupName(connIn.getGroupName()));
 
         yamlConfig.saveConfigToFile(cfg.getValue());
+    }
+
+    /**
+     * One-time default folder for connections without group, based on the connection name
+     */
+    public void assignDefaultGroups() {
+        getConnProfileList().stream()
+                .filter(c -> c.getGroupName() == null)
+                .forEach(c -> {
+                    c.setGroupName(getDefaultGroupName(c.getConfigName()));
+                    yamlConfig.saveConfigToFile(c);
+                });
+    }
+
+    public static String getDefaultGroupName(String configName) {
+        List<String> tokens = Arrays.asList(String.valueOf(configName).toUpperCase().split("[^A-Z0-9]+"));
+        if (tokens.contains("PRD")) {
+            return "SAS/Produ\u00e7\u00e3o";
+        } else if (tokens.contains("HMG") || tokens.contains("HML")) {
+            return "SAS/Homologa\u00e7\u00e3o";
+        }
+        return "";
+    }
+
+    /**
+     * "  SAS / Prod/ " -> "SAS/Prod"
+     */
+    public static String normalizeGroupName(String groupName) {
+        if (groupName == null) {
+            return "";
+        }
+        return Arrays.stream(groupName.split("/"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.joining("/"));
     }
 
     private void savePassword(ConnectionBuilder connIn, Map.Entry<String, ConfigProfile> cfg) throws GeneralSecurityException {

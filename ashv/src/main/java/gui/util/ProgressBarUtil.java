@@ -90,12 +90,8 @@ public class ProgressBarUtil
                 finally
                 {
                     finished.set(true);
-                    if (onEdt) {
-                        // dispose after the modal dialog is shown, otherwise it stays open forever
-                        SwingUtilities.invokeLater(dialog::dispose);
-                    } else {
-                        dialog.dispose();
-                    }
+                    // dispose on the EDT after the modal dialog is shown, otherwise it stays open forever
+                    SwingUtilities.invokeLater(dialog::dispose);
                 }
                 return;
             }
@@ -103,8 +99,22 @@ public class ProgressBarUtil
         }
                 ;
         worker.start();
-        if (!onEdt || !finished.get()) {
-            dialog.setVisible(true);
+        if (onEdt) {
+            if (!finished.get()) {
+                dialog.setVisible(true);
+            }
+        } else {
+            // show the dialog on the EDT (skipped if the task already ended) and wait for the task as before
+            SwingUtilities.invokeLater(() -> {
+                if (!finished.get()) {
+                    dialog.setVisible(true);
+                }
+            });
+            try {
+                worker.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }

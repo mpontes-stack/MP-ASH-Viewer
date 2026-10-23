@@ -10,6 +10,8 @@ import java.util.List;
 @Data
 public class ConfigProfile {
     private String configName;
+    // Folder path in the connection tree, e.g. "SAS/Produção"; null = not assigned yet, "" = root
+    private String groupName;
     private boolean isRunning;
 
     private int initialLoading = ConstantManager.INITIAL_LOADING;

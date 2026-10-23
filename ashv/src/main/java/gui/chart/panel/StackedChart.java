@@ -158,6 +158,16 @@ public class StackedChart implements SelectionChangeListener<XYCursor> {
         }
     }
 
+    /**
+     * Set the color of every series of the dataset by its name
+     */
+    public void setSeriesPaints(java.util.function.Function<String, Color> colorBySeriesName){
+        for (int i = 0; i < this.categoryTableXYDataset.getSeriesCount(); i++) {
+            this.stackedXYAreaRenderer3.setSeriesPaint(i,
+                    colorBySeriesName.apply(String.valueOf(this.categoryTableXYDataset.getSeriesKey(i))));
+        }
+    }
+
     public void setDateAxisWeekAndMore(){
         PeriodAxis domainAxis = new PeriodAxis(" ");
         domainAxis.setTimeZone(TimeZone.getDefault());

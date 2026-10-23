@@ -44,6 +44,7 @@ public class Main {
             UIManager.put("ScrollBar.showButtons", false);
             UIManager.put("TabbedPane.showTabSeparators", true);
             UIManager.put("Table.showHorizontalLines", true);
+            UIManager.put("Tree.showDefaultIcons", true);
         } catch (Exception e) {
             log.warn("Unable to set FlatLaf look and feel, using default: " + e.getMessage());
         }

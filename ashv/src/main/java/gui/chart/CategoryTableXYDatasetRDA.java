@@ -48,6 +48,14 @@ public class CategoryTableXYDatasetRDA extends CategoryTableXYDataset implements
         add(x, y, seriesName, false);
     }
 
+    /**
+     * Remove all series and values (with change notification)
+     */
+    public void clearAll(){
+        seriesNames.clear();
+        clear();
+    }
+
     public void notifyChanged(){
         fireDatasetChanged();
     }

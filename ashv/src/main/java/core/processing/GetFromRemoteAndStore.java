@@ -104,6 +104,9 @@ public class GetFromRemoteAndStore {
 
     @Getter @Setter private IProfile iProfile;
 
+    // Called after the main chart changes: false = live update, true = full recalculation (filter change)
+    @Setter private java.util.function.Consumer<Boolean> mainChartListener;
+
     // Detail
     private Map<String, LinkedHashMap<String, Integer>> mapDetail = new TreeMap<>();
 
@@ -319,6 +322,10 @@ public class GetFromRemoteAndStore {
 
         chartDatasetManager.getMainNameChartDataset().getDatasetRDA().deleteValuesFromDatasetDetail(ConstantManager.MAX_POINT_PER_GRAPH);
         chartDatasetManager.getNameChartDatasetDetail().forEach(e -> e.getDatasetRDA().deleteValuesFromDatasetDetail(ConstantManager.MAX_POINT_PER_GRAPH));
+
+        if (mainChartListener != null) {
+            mainChartListener.accept(false);
+        }
     }
 
     /**
@@ -368,6 +375,20 @@ public class GetFromRemoteAndStore {
             }
             detail.notifyChanged();
         });
+
+        if (mainChartListener != null) {
+            mainChartListener.accept(true);
+        }
+    }
+
+    /**
+     * Points (x values) of the main chart in ascending order
+     */
+    public synchronized List<Double> getMainChartXValues() {
+        if (chartDatasetManager.getMainNameChartDataset() == null) {
+            return new ArrayList<>();
+        }
+        return getXValues(chartDatasetManager.getMainNameChartDataset().getDatasetRDA());
     }
 
     private static List<Double> getXValues(CategoryTableXYDatasetRDA dataset) {

@@ -7,6 +7,8 @@ import core.manager.ColorManager;
 import core.processing.GetFromRemoteAndStore;
 import gui.chart.CategoryTableXYDatasetRDA;
 import gui.chart.ChartDatasetManager;
+import gui.chart.GroupByChart;
+import core.manager.ConstantManager;
 import gui.chart.panel.NameChartDataset;
 import gui.chart.panel.StackChartPanel;
 import gui.gantt.MonitorGantt2;
@@ -25,7 +27,9 @@ import javax.swing.border.EtchedBorder;
 import java.awt.*;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.ItemEvent;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -49,6 +53,7 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
     private FilteredAshLoader filteredAshLoader;
     @Getter private GanttParam lastGanttParam;
     private boolean isReloadNeeded = false;
+    @Getter private volatile String groupByColName;
 
     public HistoryPanel(BasicFrame jFrame,
                         ColorManager colorManager,
@@ -102,6 +107,62 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
         });
     }
 
+    /**
+     * Group the history charts by a raw data column, null for wait class (default)
+     */
+    public void setGroupBy(String colName) {
+        this.groupByColName = colName;
+        if (lastGanttParam == null) {
+            return;
+        }
+        if (isShowing()) {
+            reload();
+        } else {
+            isReloadNeeded = true;
+        }
+    }
+
+    /**
+     * History chart by wait class (aggregated or filtered data) or grouped by {@link #groupByColName}
+     */
+    private StackChartPanel newHistoryChart(GanttParam ganttParam, boolean isPeriodChart) {
+        StackChartPanel stackChartPanel;
+        String col = groupByColName;
+
+        if (col != null && ashFilter != null) {
+            long start = (long) ganttParam.getBeginTime();
+            long end = (long) ganttParam.getEndTime();
+            long step = Math.max(1, Math.round((double) (end - start) / ConstantManager.MAX_POINT_PER_GRAPH));
+
+            List<Double> xValues = new ArrayList<>();
+            for (long d = start; d <= end; d += step) {
+                xValues.add((double) d);
+            }
+
+            GroupByChart groupByChart = new GroupByChart(storeManager, colorManager, ashFilter, filteredAshLoader,
+                    () -> xValues, step, 8);
+            groupByChart.setColName(col);
+            groupByChart.refresh(true);
+            stackChartPanel = groupByChart.getStackChartPanel();
+        } else {
+            CategoryTableXYDatasetRDA xyDatasetRDA = new CategoryTableXYDatasetRDA();
+            stackChartPanel = new StackChartPanel(Labels.getLabel("chart.main.name"), colorManager);
+            stackChartPanel.setXyDatasetRDA(xyDatasetRDA);
+            stackChartPanel.setXAxisLabel(" ");
+            stackChartPanel.setLegendFontSize(8);
+            stackChartPanel.initialize();
+
+            loadHistoryTA(ganttParam, xyDatasetRDA, stackChartPanel);
+        }
+
+        double diff = ganttParam.getBeginTime() - ganttParam.getEndTime();
+        if (isPeriodChart && (TimeUnit.DAYS.convert((long) diff, TimeUnit.MILLISECONDS) * (-1)) > 5){
+            stackChartPanel.setDateAxisWeekAndMore();
+        }
+
+        return stackChartPanel;
+    }
+
     private void reload() {
         isReloadNeeded = false;
         ProgressBarUtil.runProgressDialog(() -> initializeGui(lastGanttParam), jFrame,
@@ -127,22 +188,8 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
         mainHistoryJPanel.removeAll();
         detailJPanel.removeAll();
 
-        CategoryTableXYDatasetRDA mainXyDatasetRDA = new CategoryTableXYDatasetRDA();
-        mainStackChartPanel = new StackChartPanel(Labels.getLabel("chart.main.name"), colorManager);
-        mainStackChartPanel.setXyDatasetRDA(mainXyDatasetRDA);
-        mainStackChartPanel.setXAxisLabel(" ");
-        mainStackChartPanel.setLegendFontSize(8);
-        mainStackChartPanel.initialize();
-
-        double diff = ganttParam.getBeginTime() - ganttParam.getEndTime();
-
-        if ((TimeUnit.DAYS.convert((long) diff, TimeUnit.MILLISECONDS) * (-1)) > 5){
-            mainStackChartPanel.setDateAxisWeekAndMore();
-        }
-
+        mainStackChartPanel = newHistoryChart(ganttParam, true);
         mainStackChartPanel.addChartListenerReleaseMouse(this);
-
-        loadHistoryTA(ganttParam, mainXyDatasetRDA, mainStackChartPanel);
 
         mainSplitPane = new JSplitPane();
         mainSplitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
@@ -159,13 +206,7 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
     }
 
     private void loadDataToDetailTA(GanttParam ganttParam, JSplitPane topASplitPane){
-        CategoryTableXYDatasetRDA mainXyDatasetRDA = new CategoryTableXYDatasetRDA();
-
-        StackChartPanel mainStackChartPanelTA = new StackChartPanel(Labels.getLabel("chart.main.name"), colorManager);
-        mainStackChartPanelTA.setXyDatasetRDA(mainXyDatasetRDA);
-        mainStackChartPanelTA.setLegendFontSize(8);
-        mainStackChartPanelTA.setXAxisLabel(" ");
-        mainStackChartPanelTA.initialize();
+        StackChartPanel mainStackChartPanelTA = newHistoryChart(ganttParam, false);
 
         JTabbedPane historyGanttAndRaw = new JTabbedPane();
 
@@ -187,8 +228,6 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
 
         mainStackChartPanelTA.addChartListenerReleaseMouse(monitorGantt20);
         mainStackChartPanelTA.addChartListenerReleaseMouse(rawDataTable20);
-
-        loadHistoryTA(ganttParam, mainXyDatasetRDA, mainStackChartPanelTA);
 
         topASplitPane.add(mainStackChartPanelTA.getStackedChart().getChartPanel(), JSplitPane.TOP);
         topASplitPane.add(historyGanttAndRaw, JSplitPane.BOTTOM);

@@ -16,6 +16,7 @@ public class ConnectionBuilder {
     private final String olapRetainDays;
     private final EncryptionType encryptionType;
     private final ContainerType containerType;
+    private final String groupName;
 
     public String getConnectionName() { return connectionName; }
     public String getUserName() { return userName; }
@@ -29,6 +30,7 @@ public class ConnectionBuilder {
     public String getOlapRetainDays() { return olapRetainDays; }
     public EncryptionType getEncryptionType() { return encryptionType; }
     public ContainerType getContainerType() { return containerType; }
+    public String getGroupName() { return groupName; }
 
     public void cleanPassword() {
         password = "";
@@ -47,6 +49,7 @@ public class ConnectionBuilder {
         private String olapRetainDays;
         private EncryptionType encryptionType;
         private ContainerType containerType;
+        private String groupName;
 
         public Builder(String connectionName) {
             this.connectionName = connectionName;
@@ -63,6 +66,7 @@ public class ConnectionBuilder {
         public Builder olapRetainDays(String raw) { olapRetainDays = raw; return this; }
         public Builder encryptionType(EncryptionType raw) { encryptionType = raw; return this; }
         public Builder containerType(ContainerType raw) { containerType = raw; return this; }
+        public Builder groupName(String gn) { groupName = gn; return this; }
 
         public ConnectionBuilder build() {
             return new ConnectionBuilder(this);
@@ -82,6 +86,7 @@ public class ConnectionBuilder {
         olapRetainDays = builder.olapRetainDays;
         encryptionType = builder.encryptionType;
         containerType = builder.containerType;
+        groupName = builder.groupName;
     }
 
 }

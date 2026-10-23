@@ -252,7 +252,8 @@ public class OlapDAO extends QueryService {
             long end0 = d + Math.round(range);
 
             if (diffInHours > 1){
-                loadDataFrom1MinEntityByWaitClass(hashMap, d, end0);
+                // 15 sec data: 1 min aggregates lose samples (merged values are written with putNoOverwrite)
+                loadDataFrom15SecEntityByWaitClass(hashMap, d, end0);
             } else {
                 loadDataFrom1SecEntityByWaitClass(hashMap, d, end0);
             }

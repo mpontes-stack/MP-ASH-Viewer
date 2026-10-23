@@ -15,6 +15,7 @@ import gui.BasicFrame;
 import gui.MainTabbedPane;
 import gui.MonitorDbPanel;
 import gui.chart.ChartDatasetManager;
+import gui.custom.DatabaseIcon;
 import gui.custom.HintTextField;
 import gui.model.ContainerType;
 import gui.model.EncryptionType;
@@ -26,7 +27,13 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.awt.event.ItemEvent;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.inject.Inject;
@@ -37,7 +44,9 @@ import javax.swing.ButtonModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.Icon;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -51,6 +60,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.JTree;
 import javax.swing.JViewport;
 import javax.swing.ListSelectionModel;
 import javax.swing.ScrollPaneConstants;
@@ -60,7 +70,12 @@ import javax.swing.SwingConstants;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.DefaultTableModel;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeCellRenderer;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeNode;
+import javax.swing.tree.TreePath;
+import javax.swing.tree.TreeSelectionModel;
 import lombok.extern.slf4j.Slf4j;
 import net.miginfocom.swing.MigLayout;
 import org.jdesktop.swingx.JXTable;
@@ -102,10 +117,9 @@ public class ConnectToDbArea extends JDialog {
     private int width = 340;
     private int height = 340;
 
-    private DefaultTableModel modelConn;
-    private JXTable tableConn;
+    private DefaultTreeModel modelConn;
+    private JTree treeConn;
 
-    private ListSelectionModel listSelectionModelForConn;
 
     static final Color LABEL_COLOR = FlatLaf.isLafDark() ? new Color(88, 157, 246) : new Color(0, 70, 213);
     private JScrollPane tableDataPaneConn;
@@ -152,6 +166,8 @@ public class ConnectToDbArea extends JDialog {
     private JLabel securityContainerLbl = new JLabel(Labels.getLabel("gui.connection.security.container"));
 
     private JTextField connNameTF = new JTextField();
+    private JLabel groupLbl = new JLabel(Labels.getLabel("gui.connection.group"), SwingConstants.LEADING);
+    private JComboBox<String> groupBox = new JComboBox<>();
     private JTextField usernameTF = new JTextField();
     private JPasswordField passwordTF = new JPasswordField();
     private JTextField urlTF = new HintTextField(Labels.getLabel("gui.connection.url.hint"));
@@ -215,8 +231,7 @@ public class ConnectToDbArea extends JDialog {
 
     private void init_gui(){
 
-        String[] colNameConfig = {Labels.getLabel("gui.connection.configuration")};
-        modelConn = new DefaultTableModel(colNameConfig, 0);
+        modelConn = new DefaultTreeModel(new ConnTreeNode(Labels.getLabel("gui.connection.configuration"), null, ""));
 
         jButtonConnect = new JButton(Labels.getLabel("gui.connection.button.connect"));
         jButtonNewConfig = new JButton(Labels.getLabel("gui.connection.button.new"));
@@ -243,26 +258,31 @@ public class ConnectToDbArea extends JDialog {
             openFileButton.setEnabled(true);
         }));
 
-        tableConn = new JXTable(modelConn);
-        tableConn.setColumnControlVisible(true);
-        tableConn.setHorizontalScrollEnabled(true);
-        tableConn.setEditable(false);
-        tableConn.setVisibleRowCount(10);
-        tableConn.setSortable(false);
+        treeConn = new JTree(modelConn);
+        treeConn.setRootVisible(false);
+        treeConn.setShowsRootHandles(true);
+        treeConn.setVisibleRowCount(16);
+        treeConn.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+        treeConn.setCellRenderer(new ConnTreeCellRenderer());
+        treeConn.addTreeSelectionListener(e -> {
+            ConnTreeNode node = getSelectedNode();
+            if (node != null && node.connName != null) {
+                selectFromDbAndSetInGui(node.connName);
+            }
+        });
 
-        TableSelectionHandler tableSelectionHandler = new TableSelectionHandler();
-        isActiveColumnCellRenderer isActiveColumnCellRenderer = new isActiveColumnCellRenderer();
-
-        listSelectionModelForConn = tableConn.getSelectionModel();
-        listSelectionModelForConn.addListSelectionListener(tableSelectionHandler);
-
-        tableConn.getColumnModel().getColumn(0).setCellRenderer(isActiveColumnCellRenderer);
+        groupBox.setEditable(true);
+        groupBox.setToolTipText(Labels.getLabel("gui.connection.group.tooltip"));
+        if (groupBox.getEditor().getEditorComponent() instanceof JComponent) {
+            ((JComponent) groupBox.getEditor().getEditorComponent())
+                    .putClientProperty("JTextField.placeholderText", Labels.getLabel("gui.connection.group.hint"));
+        }
 
         tableDataPaneConn =
                 new JScrollPane(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
                         ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         tableDataPaneConn.getViewport().setScrollMode(JViewport.SIMPLE_SCROLL_MODE);
-        tableDataPaneConn.setViewportView(tableConn);
+        tableDataPaneConn.setViewportView(treeConn);
         tableDataPaneConn.setVerticalScrollBar(tableDataPaneConn.getVerticalScrollBar());
         tableDataPaneConn.setMinimumSize(new Dimension(100, 0));
 
@@ -273,6 +293,9 @@ public class ConnectToDbArea extends JDialog {
 
         configMainJPanel.add(connNameLbl,   "skip");
         configMainJPanel.add(connNameTF,    "span, growx");
+
+        configMainJPanel.add(groupLbl,   "skip");
+        configMainJPanel.add(groupBox,    "span, growx");
 
         configMainJPanel.add(urlLbl,   "skip");
         configMainJPanel.add(urlTF,    "span, growx");
@@ -465,8 +488,10 @@ public class ConnectToDbArea extends JDialog {
         });
 
         jButtonNewConfig.addActionListener(e ->{
+            ConnTreeNode selected = getSelectedNode();
             this.setDetailEditable(true);
             this.clearProfileFields();
+            groupBox.setSelectedItem(selected == null ? "" : selected.groupPath); // new connection in the selected folder
         });
 
         jButtonCopyConfig.addActionListener(e ->{
@@ -552,6 +577,7 @@ public class ConnectToDbArea extends JDialog {
 
         this.setDetailEditable(false);
 
+        configurationManager.assignDefaultGroups();
         this.loadConfigToGui();
 
         buttonPanel.add(jButtonConnect, "gap 1");
@@ -579,6 +605,7 @@ public class ConnectToDbArea extends JDialog {
 
     private void setDetailEditable(boolean bParameter){
         connNameTF.setEnabled(bParameter);
+        groupBox.setEnabled(bParameter);
         usernameTF.setEnabled(bParameter);
         passwordTF.setEnabled(bParameter);
         urlTF.setEnabled(bParameter);
@@ -609,6 +636,7 @@ public class ConnectToDbArea extends JDialog {
 
     private void clearProfileFields(){
         connNameTF.setText("");
+        groupBox.setSelectedItem("");
         usernameTF.setText("");
         passwordTF.setText("");
         urlTF.setText("");
@@ -640,6 +668,7 @@ public class ConnectToDbArea extends JDialog {
         ConnectionBuilder connParameters = configurationManager.getConnectionParameters(connName);
 
         connNameTF.setText(connParameters.getConnectionName());
+        groupBox.setSelectedItem(connParameters.getGroupName());
         usernameTF.setText(connParameters.getUserName());
         passwordTF.setText(connParameters.getPassword());
         urlTF.setText(connParameters.getUrl());
@@ -724,6 +753,7 @@ public class ConnectToDbArea extends JDialog {
                 .olapRetainDays(olapDataDaysRetainTF.getText())
                 .encryptionType(getEncryptionType())
                 .containerType(getContainerType())
+                .groupName(String.valueOf(groupBox.getEditor().getItem()))
                 .build();
 
         configurationManager.saveConnection(connParameters);
@@ -752,29 +782,162 @@ public class ConnectToDbArea extends JDialog {
     }
 
     private void loadConfigToGui(){
-        modelConn.setRowCount(0);
+        ConnTreeNode previous = getSelectedNode();
+        String previousConnName = previous == null ? null : previous.connName;
 
-        configurationManager.getConnProfileList().stream()
-                .map(ConfigProfile::getConfigName)
+        ConnTreeNode root = new ConnTreeNode(Labels.getLabel("gui.connection.configuration"), null, "");
+
+        List<ConfigProfile> configs = new ArrayList<>(configurationManager.getConnProfileList());
+        configs.sort(Comparator.comparing(ConfigProfile::getConfigName, String.CASE_INSENSITIVE_ORDER));
+
+        for (ConfigProfile config : configs) {
+            ConnTreeNode parent = root;
+            String path = "";
+            String groupName = ConfigurationManager.normalizeGroupName(config.getGroupName());
+            if (!groupName.isEmpty()) {
+                for (String folder : groupName.split("/")) {
+                    path = path.isEmpty() ? folder : path + "/" + folder;
+                    parent = parent.getOrAddFolder(folder, path);
+                }
+            }
+            ConnTreeNode connNode = new ConnTreeNode(config.getConfigName(), config.getConfigName(), groupName);
+            connNode.dbType = DatabaseIcon.typeOf(config.getConnProfile() == null ? null : config.getConnProfile().getProfileName());
+            parent.add(connNode);
+        }
+        root.sortChildren();
+
+        modelConn.setRoot(root);
+        for (int i = 0; i < treeConn.getRowCount(); i++) {
+            treeConn.expandRow(i);
+        }
+
+        // Existing folders for the group field
+        Object currentGroup = groupBox.getEditor().getItem();
+        groupBox.removeAllItems();
+        groupBox.addItem("");
+        configs.stream()
+                .map(c -> ConfigurationManager.normalizeGroupName(c.getGroupName()))
+                .filter(g -> !g.isEmpty())
+                .distinct()
                 .sorted(String.CASE_INSENSITIVE_ORDER)
-                .forEach(name -> modelConn.addRow(new Object[]{name}));
+                .forEach(groupBox::addItem);
+        groupBox.setSelectedItem(currentGroup);
 
-        tableConn.packAll();
-
-        try {
-            tableConn.setRowSelectionInterval(0, 0);
-        } catch (IllegalArgumentException e){
-            log.info("Catch IllegalArgumentException: Row index out of range");
+        if (previousConnName == null || !selectConfigByName(previousConnName)) {
+            selectFirstConnection(root);
         }
     }
 
-    private void selectConfigByName(String connName) {
-        for (int i = 0; i < modelConn.getRowCount(); i++) {
-            if (String.valueOf(modelConn.getValueAt(i, 0)).equalsIgnoreCase(connName)) {
-                int viewRow = tableConn.convertRowIndexToView(i);
-                tableConn.setRowSelectionInterval(viewRow, viewRow);
-                tableConn.scrollRowToVisible(viewRow);
+    private boolean selectConfigByName(String connName) {
+        ConnTreeNode node = findConnection((ConnTreeNode) modelConn.getRoot(), connName);
+        if (node == null) {
+            return false;
+        }
+        TreePath path = new TreePath(node.getPath());
+        treeConn.setSelectionPath(path);
+        treeConn.scrollPathToVisible(path);
+        return true;
+    }
+
+    private void selectFirstConnection(ConnTreeNode root) {
+        Enumeration<TreeNode> nodes = root.depthFirstEnumeration();
+        List<ConnTreeNode> leaves = new ArrayList<>();
+        while (nodes.hasMoreElements()) {
+            ConnTreeNode node = (ConnTreeNode) nodes.nextElement();
+            if (node.connName != null) {
+                leaves.add(node);
+            }
+        }
+        // first connection in display order
+        for (int i = 0; i < treeConn.getRowCount(); i++) {
+            Object last = treeConn.getPathForRow(i).getLastPathComponent();
+            if (leaves.contains(last)) {
+                treeConn.setSelectionRow(i);
                 return;
+            }
+        }
+    }
+
+    private ConnTreeNode findConnection(ConnTreeNode parent, String connName) {
+        Enumeration<TreeNode> nodes = parent.depthFirstEnumeration();
+        while (nodes.hasMoreElements()) {
+            ConnTreeNode node = (ConnTreeNode) nodes.nextElement();
+            if (node.connName != null && node.connName.equalsIgnoreCase(connName)) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private ConnTreeNode getSelectedNode() {
+        TreePath path = treeConn == null ? null : treeConn.getSelectionPath();
+        return path == null ? null : (ConnTreeNode) path.getLastPathComponent();
+    }
+
+    /**
+     * Connection nodes with a database icon by type (Oracle, Postgres)
+     */
+    private static class ConnTreeCellRenderer extends DefaultTreeCellRenderer {
+        private final Map<DatabaseIcon.Type, Icon> icons = new EnumMap<>(DatabaseIcon.Type.class);
+
+        @Override
+        public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel, boolean expanded,
+                                                      boolean leaf, int row, boolean hasFocus) {
+            Component c = super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+            if (value instanceof ConnTreeNode && ((ConnTreeNode) value).connName != null) {
+                setIcon(icons.computeIfAbsent(((ConnTreeNode) value).dbType, DatabaseIcon::new));
+            }
+            return c;
+        }
+    }
+
+    /**
+     * Folder (connName == null) or connection node of the connection tree
+     */
+    private static class ConnTreeNode extends DefaultMutableTreeNode {
+        final String connName;
+        final String groupPath;
+        DatabaseIcon.Type dbType = DatabaseIcon.Type.OTHER;
+
+        ConnTreeNode(String label, String connName, String groupPath) {
+            super(label);
+            this.connName = connName;
+            this.groupPath = groupPath;
+        }
+
+        ConnTreeNode getOrAddFolder(String name, String path) {
+            for (int i = 0; i < getChildCount(); i++) {
+                ConnTreeNode child = (ConnTreeNode) getChildAt(i);
+                if (child.connName == null && child.getUserObject().toString().equalsIgnoreCase(name)) {
+                    return child;
+                }
+            }
+            ConnTreeNode folder = new ConnTreeNode(name, null, path);
+            add(folder);
+            return folder;
+        }
+
+        @Override
+        public boolean isLeaf() {
+            return connName != null;
+        }
+
+        /** Folders first, then connections, both alphabetically */
+        @SuppressWarnings("unchecked")
+        void sortChildren() {
+            if (children == null) {
+                return;
+            }
+            children.sort((a, b) -> {
+                ConnTreeNode n1 = (ConnTreeNode) a;
+                ConnTreeNode n2 = (ConnTreeNode) b;
+                if ((n1.connName == null) != (n2.connName == null)) {
+                    return n1.connName == null ? -1 : 1;
+                }
+                return String.CASE_INSENSITIVE_ORDER.compare(n1.toString(), n2.toString());
+            });
+            for (int i = 0; i < getChildCount(); i++) {
+                ((ConnTreeNode) getChildAt(i)).sortChildren();
             }
         }
     }
@@ -847,32 +1010,6 @@ public class ConnectToDbArea extends JDialog {
         }
 
         this.setVisible(false);
-    }
-
-    private class TableSelectionHandler implements ListSelectionListener {
-        public void valueChanged(ListSelectionEvent e) {
-            ListSelectionModel lsm = (ListSelectionModel)e.getSource();
-
-            if (lsm.isSelectionEmpty()) {
-                clearProfileFields();
-            } else {
-                int minIndex = lsm.getMinSelectionIndex();
-                int maxIndex = lsm.getMaxSelectionIndex();
-                for (int i = minIndex; i <= maxIndex; i++) {
-                    if (lsm.isSelectedIndex(i)) {
-                        selectFromDbAndSetInGui((String)tableConn.getModel().getValueAt(i, 0));
-                    }
-                }
-            }
-        }
-    }
-
-    private class isActiveColumnCellRenderer extends DefaultTableCellRenderer {
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int col) {
-            JLabel l = (JLabel) super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, col);
-            return l;
-        }
     }
 
     private class JdialogComponentListener implements  ComponentListener{
