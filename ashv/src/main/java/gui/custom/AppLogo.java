@@ -29,7 +29,7 @@ public final class AppLogo {
     /**
      * Logo label
      *
-     * @param iconHeight monkey height (22 or 40, images prepared for these sizes)
+     * @param iconHeight monkey height (28 or 40, images prepared for these sizes)
      * @param fontDelta  font size relative to the interface font
      */
     public static JLabel label(int iconHeight, float fontDelta) {

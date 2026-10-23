@@ -65,7 +65,7 @@ public class MainWindow {
         this.mainToolBar.add(connectButton);
 
         // discreet logo at the right end of the toolbar
-        JLabel logo = AppLogo.label(22, 0);
+        JLabel logo = AppLogo.label(28, 1);
         logo.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
         this.mainToolBar.add(Box.createHorizontalGlue());
         this.mainToolBar.add(logo);
