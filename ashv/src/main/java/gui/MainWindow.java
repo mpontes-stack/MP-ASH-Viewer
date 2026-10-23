@@ -1,5 +1,10 @@
 package gui;
 
+import gui.custom.AppLogo;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.JLabel;
+
 import config.GUIConfig;
 import gui.actions.ConnectToDbAction;
 import gui.actions.StartStopAction;
@@ -59,6 +64,12 @@ public class MainWindow {
 
         this.mainToolBar.add(connectButton);
 
+        // discreet logo at the right end of the toolbar
+        JLabel logo = AppLogo.label(22, 0);
+        logo.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
+        this.mainToolBar.add(Box.createHorizontalGlue());
+        this.mainToolBar.add(logo);
+
         this.jFrame.addProfileArea(this.mainToolBar, BorderLayout.NORTH);
         this.jFrame.addProfileArea(this.mainTabPane, BorderLayout.CENTER);
         this.jFrame.addProfileArea(this.mainStatusBar, BorderLayout.SOUTH);
@@ -70,7 +81,8 @@ public class MainWindow {
     }
 
     private void initJFrame(final BasicFrame jFrame){
-        jFrame.setTitle("ASH Viewer");
+        jFrame.setTitle(AppLogo.NAME);
+        jFrame.setIconImages(AppLogo.windowIcons());
         jFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         jFrame.setVisible(true);
         jFrame.setSize(guiConfig.getMainWindowSize());

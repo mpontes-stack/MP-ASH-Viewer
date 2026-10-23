@@ -16,6 +16,7 @@ import gui.MainTabbedPane;
 import gui.MonitorDbPanel;
 import gui.chart.ChartDatasetManager;
 import gui.custom.DatabaseIcon;
+import gui.custom.AppLogo;
 import gui.custom.HintTextField;
 import gui.model.ContainerType;
 import gui.model.EncryptionType;
@@ -619,7 +620,8 @@ public class ConnectToDbArea extends JDialog {
         connJSplitPane.setOneTouchExpandable(true);
         connJSplitPane.setResizeWeight(0.3);
 
-        mainJPanel.add(buttonPanel, "wrap, wmin 200");
+        mainJPanel.add(buttonPanel, "split 2, growx, wmin 200");
+        mainJPanel.add(AppLogo.label(40, 2), "right, gapright 8, wrap");
         mainJPanel.add(connJSplitPane, "grow");
 
         JdialogComponentListener jdialogComponentListener = new JdialogComponentListener();

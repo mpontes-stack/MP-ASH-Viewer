@@ -18,7 +18,7 @@ public final class StackTraceUtil {
      */
     public static String getCustomStackTrace(Throwable throwable) {
         //add the class name and any message passed to constructor
-        StringBuilder result = new StringBuilder("ASH Viewer error: ");
+        StringBuilder result = new StringBuilder("MP-ASH-Viewer error: ");
         result.append(throwable.toString());
         String NL = System.getProperty("line.separator");
         result.append(NL);
