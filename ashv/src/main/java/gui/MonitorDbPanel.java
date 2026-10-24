@@ -15,6 +15,7 @@ import gui.chart.ChartDatasetManager;
 import gui.chart.GroupByChart;
 import gui.chart.panel.NameChartDataset;
 import gui.compare.ComparePanel;
+import gui.custom.TabIcon;
 import gui.filter.FilterBar;
 import gui.snapshot.SnapshotPanel;
 import remote.RemoteDBManager;
@@ -157,22 +158,21 @@ public class MonitorDbPanel {
     }
 
     public void adddGui(){
-        mainTabbedPane.add("Top Activity", topActivitySplitPane);
-        mainTabbedPane.add(Labels.getLabel("gui.snapshot.tab.sessions"),
-                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.SESSIONS));
-        mainTabbedPane.add(Labels.getLabel("gui.snapshot.tab.resources"),
-                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.RESOURCES));
+        mainTabbedPane.addTab("Top Activity", new TabIcon(TabIcon.Type.ACTIVITY), topActivitySplitPane);
         // Detail tab is hidden by default (Top Activity "group by" covers it); -Dashv.detailtab=true shows it
         if (Boolean.getBoolean("ashv.detailtab")) {
             mainTabbedPane.add("Detail", detailSplitPane);
         }
-        mainTabbedPane.add("History", controlMainDetailHistory);
-        mainTabbedPane.add(Labels.getLabel("gui.compare.tab"), getComparePanel());
+        addGuiHistory();
+        mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.sessions"), new TabIcon(TabIcon.Type.SESSIONS),
+                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.SESSIONS));
+        mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.resources"), new TabIcon(TabIcon.Type.RESOURCES),
+                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.RESOURCES));
     }
 
     public void addGuiHistory(){
-        mainTabbedPane.add("History", controlMainDetailHistory);
-        mainTabbedPane.add(Labels.getLabel("gui.compare.tab"), getComparePanel());
+        mainTabbedPane.addTab("History", new TabIcon(TabIcon.Type.HISTORY), controlMainDetailHistory);
+        mainTabbedPane.addTab(Labels.getLabel("gui.compare.tab"), new TabIcon(TabIcon.Type.COMPARE), getComparePanel());
     }
 
     /** "Comparar" tab, period B starts as the History period (or the Top Activity chart) */
