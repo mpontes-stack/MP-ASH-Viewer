@@ -68,6 +68,11 @@ public class Options {
         return  seriesNameColorAll.containsKey(eventName) ? seriesNameColorAll.get(eventName) : new Color(100,100,100);
     }
 
+    /** Change a main or detail color (e.g. lighter colors for the dark theme) */
+    public static void setColor(String eventName, Color color){
+        seriesNameColorAll.put(eventName, color);
+    }
+
     protected static void loadTopActivityColorOracle(){
         seriesMainOracle.put(LBL_CPU,new Color(0,179,0));
         seriesMainOracle.put(LBL_SCHEDULER, new Color(133,255,133));
