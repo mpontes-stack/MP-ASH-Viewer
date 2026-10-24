@@ -160,13 +160,16 @@ public class PeriodComparison {
             if (samplesA == 0) return State.NEW;
             if (samplesB == 0) return State.GONE;
             if (Math.abs(vb - va) < measure.getMinDelta()) return State.SAME;
-            if (vb >= va * 1.2) return State.UP;
-            if (vb <= va / 1.2) return State.DOWN;
+            if (vb >= va * (1 + CHANGE)) return State.UP;
+            if (vb <= va * (1 - CHANGE)) return State.DOWN;
             return State.SAME;
         }
     }
 
     public enum State { NEW, GONE, UP, DOWN, SAME }
+
+    /** Up from +5%, down from -5% (B compared to A) */
+    private static final double CHANGE = 0.05;
 
     /** One period: samples per value and the time really collected */
     @Getter

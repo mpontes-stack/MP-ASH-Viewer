@@ -178,7 +178,8 @@ public class MonitorDbPanel {
     /** "Comparar" tab, period B starts as the History period (or the Top Activity chart) */
     private ComparePanel getComparePanel() {
         if (comparePanel == null) {
-            comparePanel = new ComparePanel(storeManager, ashFilter, this::getHistoryRange);
+            comparePanel = new ComparePanel(storeManager, ashFilter, filteredAshLoader, colorManager, this::getHistoryRange);
+            comparePanel.setFilterBar(newFilterBar(comparePanel::getFilterRange));
         }
         return comparePanel;
     }
