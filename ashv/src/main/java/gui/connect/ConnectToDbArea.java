@@ -1,6 +1,5 @@
 package gui.connect;
 
-import com.formdev.flatlaf.FlatLaf;
 import com.github.windpapi4j.WinDPAPI;
 import config.GUIConfig;
 import config.Labels;
@@ -21,6 +20,7 @@ import gui.custom.HintTextField;
 import gui.model.ContainerType;
 import gui.model.EncryptionType;
 import gui.util.ProgressBarUtil;
+import gui.util.Themes;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -68,6 +68,7 @@ import javax.swing.ScrollPaneConstants;
 import javax.swing.SpinnerModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.table.DefaultTableCellRenderer;
@@ -122,7 +123,12 @@ public class ConnectToDbArea extends JDialog {
     private JTree treeConn;
 
 
-    static final Color LABEL_COLOR = FlatLaf.isLafDark() ? new Color(88, 157, 246) : new Color(0, 70, 213);
+    private static final Color LABEL_COLOR = new Color(0, 70, 213);
+    private static final Color LABEL_COLOR_DARK = new Color(88, 157, 246);
+
+    /** A database is monitored: the charts keep the colors of their theme, a new theme waits for the next start */
+    private boolean monitoring = false;
+    private JComboBox<String> themeBox;
     private JScrollPane tableDataPaneConn;
     private JSplitPane connJSplitPane;
 
@@ -289,7 +295,7 @@ public class ConnectToDbArea extends JDialog {
         tableDataPaneConn.setMinimumSize(new Dimension(100, 0));
 
         /******/
-        separatorConnLbl.setForeground(LABEL_COLOR);
+        Themes.foreground(separatorConnLbl, LABEL_COLOR, LABEL_COLOR_DARK);
         configMainJPanel.add(separatorConnLbl, "gapbottom 1, span, split 2, aligny center");
         configMainJPanel.add(new JSeparator(), "gapleft rel, growx");
 
@@ -309,7 +315,7 @@ public class ConnectToDbArea extends JDialog {
         configMainJPanel.add(passwordLbl,   "skip");
         configMainJPanel.add(passwordTF,    "span, growx");
 
-        separatorProfileLbl.setForeground(LABEL_COLOR);
+        Themes.foreground(separatorProfileLbl, LABEL_COLOR, LABEL_COLOR_DARK);
         configMainJPanel.add(separatorProfileLbl, "gapbottom 1, span, split 2, aligny center");
         configMainJPanel.add(new JSeparator(), "gapleft rel, growx");
 
@@ -333,7 +339,7 @@ public class ConnectToDbArea extends JDialog {
         configMainJPanel.add(isOffline,   "span, growx");
         isOffline.setSelected(false);
 
-        separatorInitialLoadingLbl.setForeground(LABEL_COLOR);
+        Themes.foreground(separatorInitialLoadingLbl, LABEL_COLOR, LABEL_COLOR_DARK);
         configOtherJPanel.add(separatorInitialLoadingLbl, "gapbottom 1, span, split 2, aligny center");
         configOtherJPanel.add(new JSeparator(), "gapleft rel, growx");
 
@@ -450,7 +456,7 @@ public class ConnectToDbArea extends JDialog {
         configOtherJPanel.add(initialLoadingOracleEELbl,   "skip");
         configOtherJPanel.add(initialLoadPanel,    "span, growx, wmin 100");
 
-        separatorRetainLbl.setForeground(LABEL_COLOR);
+        Themes.foreground(separatorRetainLbl, LABEL_COLOR, LABEL_COLOR_DARK);
         configOtherJPanel.add(separatorRetainLbl, "gapbottom 1, span, split 2, aligny center");
         configOtherJPanel.add(new JSeparator(), "gapleft rel, growx");
 
@@ -462,7 +468,7 @@ public class ConnectToDbArea extends JDialog {
         configOtherJPanel.add(olapDataDaysRetainTF,    "span, growx, wmin 150");
         olapDataDaysRetainTF.setToolTipText(Labels.getLabel("gui.connection.retain.olap.tooltip"));
 
-        securityLbl.setForeground(LABEL_COLOR);
+        Themes.foreground(securityLbl, LABEL_COLOR, LABEL_COLOR_DARK);
         configOtherJPanel.add(securityLbl, "gapbottom 1, span, split 2, aligny center");
         configOtherJPanel.add(new JSeparator(), "gapleft rel, growx");
 
@@ -620,12 +626,48 @@ public class ConnectToDbArea extends JDialog {
         connJSplitPane.setOneTouchExpandable(true);
         connJSplitPane.setResizeWeight(0.3);
 
-        mainJPanel.add(buttonPanel, "split 2, growx, wmin 200");
+        mainJPanel.add(buttonPanel, "split 3, growx, wmin 200");
+        mainJPanel.add(createThemePanel(), "right");
         mainJPanel.add(AppLogo.label(40, 2), "right, gapright 8, wrap");
         mainJPanel.add(connJSplitPane, "grow");
 
         JdialogComponentListener jdialogComponentListener = new JdialogComponentListener();
         this.addComponentListener(jdialogComponentListener);
+    }
+
+    private static final String[] THEMES = {Themes.LIGHT, Themes.DARK, Themes.CLASSIC};
+
+    /**
+     * "Tema" combo: changes the open windows before connecting, otherwise only at the next start
+     */
+    private JPanel createThemePanel() {
+        themeBox = new JComboBox<>();
+        for (String theme : THEMES) {
+            themeBox.addItem(Labels.getLabel("gui.theme." + theme));
+        }
+        themeBox.setSelectedIndex(Arrays.asList(THEMES).indexOf(Themes.current()));
+        themeBox.setToolTipText(Labels.getLabel("gui.theme.tooltip"));
+        themeBox.addActionListener(e -> {
+            String theme = THEMES[themeBox.getSelectedIndex()];
+            if (theme.equals(Themes.current())) {
+                return;
+            }
+            if (monitoring) {
+                Themes.save(theme);
+                JOptionPane.showMessageDialog(this, Labels.getLabel("gui.theme.next"),
+                        Labels.getLabel("gui.theme.title"), JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                SwingUtilities.invokeLater(() -> {
+                    Themes.switchTo(theme);
+                    this.pack();
+                });
+            }
+        });
+
+        JPanel panel = new JPanel(new MigLayout("ins 0", "[][]"));
+        panel.add(new JLabel(Labels.getLabel("gui.theme.label")));
+        panel.add(themeBox);
+        return panel;
     }
 
     private void setDetailEditable(boolean bParameter){
@@ -1016,6 +1058,7 @@ public class ConnectToDbArea extends JDialog {
             getFromRemoteAndStore.loadDataFromRemoteToLocalStore();
 
             monitorDbPanel.initializeGui();
+            monitoring = true;
 
             monitorDbPanel.setProfile(configurationManager.getIProfile());
 
@@ -1060,6 +1103,7 @@ public class ConnectToDbArea extends JDialog {
             jButtonConnect.setText(Labels.getLabel("gui.connection.button.connect.running"));
 
             monitorDbPanel.addGuiHistory();
+            monitoring = true;
 
         } catch (Exception ex) {
             ex.printStackTrace();

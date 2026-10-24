@@ -1,6 +1,6 @@
 package gui.custom;
 
-import com.formdev.flatlaf.FlatLaf;
+import gui.util.Themes;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Image;
@@ -41,7 +41,7 @@ public final class AppLogo {
         label.setIconTextGap(Math.max(4, iconHeight / 5));
         label.setHorizontalTextPosition(SwingConstants.RIGHT);
         label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() + fontDelta));
-        label.setForeground(isDark() ? BROWN_DARK_THEME : BROWN);
+        Themes.foreground(label, BROWN, BROWN_DARK_THEME);
         label.setToolTipText(NAME);
         return label;
     }
@@ -74,14 +74,6 @@ public final class AppLogo {
         } catch (Exception e) {
             log.info("Logo resource " + resource + ": " + e.getMessage());
             return null;
-        }
-    }
-
-    private static boolean isDark() {
-        try {
-            return FlatLaf.isLafDark();
-        } catch (Throwable e) {
-            return false;
         }
     }
 }
