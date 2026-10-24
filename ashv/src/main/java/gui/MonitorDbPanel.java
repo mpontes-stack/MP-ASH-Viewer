@@ -14,6 +14,7 @@ import core.processing.GetFromRemoteAndStore;
 import gui.chart.ChartDatasetManager;
 import gui.chart.GroupByChart;
 import gui.chart.panel.NameChartDataset;
+import gui.compare.ComparePanel;
 import gui.filter.FilterBar;
 import gui.snapshot.SnapshotPanel;
 import remote.RemoteDBManager;
@@ -71,6 +72,7 @@ public class MonitorDbPanel {
     private MonitorGantt2 monitorGantt20;
     private RawDataTable rawDataTable20;
     private LockTreePanel lockTreePanel;
+    private ComparePanel comparePanel;
     private ObjectNames objectNames;
 
     @Getter @Setter private ConnProfile connProfile;
@@ -130,6 +132,7 @@ public class MonitorDbPanel {
         lockTreePanel = new LockTreePanel(storeManager, ashFilter, getFromRemoteAndStore::getMainChartRange,
                 objectNames, true);
         chartDatasetManager.getMainNameChartDataset().getStackChartPanel().addChartListenerReleaseMouse(lockTreePanel);
+        chartDatasetManager.getMainNameChartDataset().getStackChartPanel().addChartListenerReleaseMouse(getComparePanel());
         mainGanttAndRaw.add(Labels.getLabel("gui.lock.tab"), lockTreePanel);
 
         FilterBar filterBar = newFilterBar(getFromRemoteAndStore::getMainChartRange);
@@ -164,10 +167,20 @@ public class MonitorDbPanel {
             mainTabbedPane.add("Detail", detailSplitPane);
         }
         mainTabbedPane.add("History", controlMainDetailHistory);
+        mainTabbedPane.add(Labels.getLabel("gui.compare.tab"), getComparePanel());
     }
 
     public void addGuiHistory(){
         mainTabbedPane.add("History", controlMainDetailHistory);
+        mainTabbedPane.add(Labels.getLabel("gui.compare.tab"), getComparePanel());
+    }
+
+    /** "Comparar" tab, period B starts as the History period (or the Top Activity chart) */
+    private ComparePanel getComparePanel() {
+        if (comparePanel == null) {
+            comparePanel = new ComparePanel(storeManager, ashFilter, this::getHistoryRange);
+        }
+        return comparePanel;
     }
 
     // Columns for "group by" (shown when collected by the connection)
@@ -191,6 +204,7 @@ public class MonitorDbPanel {
         groupByChart.getStackChartPanel().addChartListenerReleaseMouse(main.getRawDataTable());
         groupByChart.getStackChartPanel().addChartListenerReleaseMouse(main.getAshReport());
         groupByChart.getStackChartPanel().addChartListenerReleaseMouse(lockTreePanel);
+        groupByChart.getStackChartPanel().addChartListenerReleaseMouse(getComparePanel());
         getFromRemoteAndStore.setMainChartListener(groupByChart::refresh);
 
         CardLayout cardLayout = new CardLayout();
