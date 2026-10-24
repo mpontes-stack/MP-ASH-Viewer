@@ -136,6 +136,9 @@ public class MonitorDbPanel {
         JPanel topActivityNorthPanel = new JPanel(new BorderLayout());
         topActivityNorthPanel.add(createGroupByPanel(), BorderLayout.WEST);
         topActivityNorthPanel.add(filterBar, BorderLayout.CENTER);
+        JPanel reconnectPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 3));
+        reconnectPanel.add(createReconnectButton());
+        topActivityNorthPanel.add(reconnectPanel, BorderLayout.EAST);
 
         JPanel topActivityChartPanel = new JPanel(new BorderLayout());
         topActivityChartPanel.add(topActivityNorthPanel, BorderLayout.NORTH);
@@ -240,6 +243,35 @@ public class MonitorDbPanel {
         panel.add(groupByBox);
         panel.add(new JSeparator(SwingConstants.VERTICAL));
         return panel;
+    }
+
+    /**
+     * New connections for the ASH collection, after a network drop (the collection does not recover alone)
+     */
+    private JButton createReconnectButton() {
+        JButton button = new JButton(Labels.getLabel("gui.reconnect.button"));
+        button.setToolTipText(Labels.getLabel("gui.reconnect.tooltip"));
+        button.addActionListener(e -> {
+            button.setEnabled(false);
+            button.setText(Labels.getLabel("gui.reconnect.running"));
+            Thread t = new Thread(() -> {
+                String error = getFromRemoteAndStore.reconnect();
+                SwingUtilities.invokeLater(() -> {
+                    button.setText(Labels.getLabel("gui.reconnect.button"));
+                    button.setEnabled(true);
+                    if (error == null) {
+                        JOptionPane.showMessageDialog(button, Labels.getLabel("gui.reconnect.done"),
+                                Labels.getLabel("gui.reconnect.button"), JOptionPane.INFORMATION_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(button, Labels.getLabel("gui.reconnect.error") + "\n" + error,
+                                Labels.getLabel("gui.reconnect.button"), JOptionPane.ERROR_MESSAGE);
+                    }
+                });
+            }, "reconnect");
+            t.setDaemon(true);
+            t.start();
+        });
+        return button;
     }
 
     private FilterBar newFilterBar(java.util.function.Supplier<long[]> rangeSupplier) {

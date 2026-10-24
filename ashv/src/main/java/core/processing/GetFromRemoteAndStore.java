@@ -94,8 +94,8 @@ public class GetFromRemoteAndStore {
     @Getter
     private ConnProfile connProfile;
 
-    private Connection connection = null;
-    private Connection connectionForTrace = null;
+    private volatile Connection connection = null;
+    private volatile Connection connectionForTrace = null;
 
     private Map<String, List<SqlColProfile>> metadataMap = new HashMap<>();
 
@@ -720,6 +720,50 @@ public class GetFromRemoteAndStore {
     private void initializeConnection() throws SQLException {
         this.connection = this.remoteDBManager.getConnection();
         this.connectionForTrace = this.remoteDBManager.getConnection();
+    }
+
+    /**
+     * New connections for the collection (e.g. after a network drop): the collection keeps its connections
+     * for the whole session and does not recover alone. The old ones are aborted, which also releases a query
+     * hanging on a dead connection. Call off the EDT.
+     *
+     * @return null when done, otherwise the error
+     */
+    public String reconnect() {
+        Connection newConnection = null;
+        try {
+            newConnection = this.remoteDBManager.getConnection();
+            Connection newConnectionForTrace = this.remoteDBManager.getConnection();
+
+            Connection old = this.connection;
+            Connection oldForTrace = this.connectionForTrace;
+            this.connection = newConnection;
+            this.connectionForTrace = newConnectionForTrace;
+            abort(old);
+            abort(oldForTrace);
+            log.info("Collection reconnected");
+            return null;
+        } catch (Exception e) {
+            log.error("Collection reconnect: " + e);
+            abort(newConnection);
+            return e.getMessage();
+        }
+    }
+
+    private static void abort(Connection c) {
+        if (c == null) {
+            return;
+        }
+        try {
+            c.abort(Runnable::run);
+        } catch (Exception e) {
+            log.info("Abort connection: " + e.getMessage());
+        }
+        try {
+            c.close(); // back to the pool, which discards it
+        } catch (Exception e) {
+            log.info("Close connection: " + e.getMessage());
+        }
     }
 
     private List<SqlColProfile> loadSqlMetaData(String sqlName, String sqlText) {
