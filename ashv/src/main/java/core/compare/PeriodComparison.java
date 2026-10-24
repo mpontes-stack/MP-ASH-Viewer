@@ -24,6 +24,9 @@ import store.entity.database.MainData;
 public class PeriodComparison {
     /** Pseudo column: SESSION_ID + serial# */
     public static final String SESSION = "SESSION";
+    /** Dimension with the execution plans of each value */
+    public static final String SQL_ID = "SQL_ID";
+    private static final String PLAN_COL = "SQL_PLAN_HASH_VALUE";
 
     /** Collection stopped (tunnel down, app closed): not counted as time of the period */
     private static final long MIN_GAP_MS = 60_000;
@@ -60,8 +63,11 @@ public class PeriodComparison {
         }
         SqlColProfile waitClassCol = findCol(cols, iProfile.getWaitClassColName()).orElse(null);
         SqlColProfile eventCol = findCol(cols, iProfile.getEventColName()).orElse(null);
+        SqlColProfile planCol = dimensionCols.containsKey(SQL_ID) ? findCol(cols, PLAN_COL).orElse(null) : null;
 
-        Reader reader = new Reader(matcher, dimensionCols, sessionCol, serialCol, waitClassCol, eventCol);
+        // v$active_session_history: no wait class / event when on CPU (as in the charts)
+        String cpuLabel = iProfile.getWaitClass((byte) 0);
+        Reader reader = new Reader(matcher, dimensionCols, sessionCol, serialCol, waitClassCol, eventCol, planCol, cpuLabel);
         Period a = reader.read(storeManager, rangeA, stale);
         Period b = a == null ? null : reader.read(storeManager, rangeB, stale);
         if (b == null) {
@@ -74,7 +80,38 @@ public class PeriodComparison {
     public List<Item> items(String dimension, Measure measure) {
         Map<String, Counter> inA = a.byDimension.getOrDefault(dimension, Collections.emptyMap());
         Map<String, Counter> inB = b.byDimension.getOrDefault(dimension, Collections.emptyMap());
-        return items(inA, inB, measure);
+        List<Item> items = items(inA, inB, measure);
+        if (SQL_ID.equals(dimension)) {
+            items.forEach(i -> {
+                i.plansA = plans(a, i.value);
+                i.plansB = plans(b, i.value);
+            });
+        }
+        return items;
+    }
+
+    /** SQL_IDs run with a plan in B not seen in A */
+    public long planChanges() {
+        return a.plans.keySet().stream()
+                .filter(sql -> isPlanChanged(plans(a, sql), plans(b, sql)))
+                .count();
+    }
+
+    /** Execution plans were collected (SQL_PLAN_HASH_VALUE) in both periods */
+    public boolean hasPlans() {
+        return !a.plans.isEmpty() && !b.plans.isEmpty();
+    }
+
+    /** Plans of a SQL_ID, the most sampled first */
+    private static List<String> plans(Period period, String sqlId) {
+        Map<String, Long> counts = period.plans.getOrDefault(sqlId, Collections.emptyMap());
+        List<String> out = new ArrayList<>(counts.keySet());
+        out.sort((x, y) -> Long.compare(counts.get(y), counts.get(x)));
+        return out;
+    }
+
+    private static boolean isPlanChanged(List<String> plansA, List<String> plansB) {
+        return !plansA.isEmpty() && !plansB.isEmpty() && !plansA.containsAll(plansB);
     }
 
     public List<Item> waitClasses(Measure measure) {
@@ -131,6 +168,9 @@ public class PeriodComparison {
         private long samplesA;
         private long samplesB;
         @Getter private String topEvent;
+        /** Execution plans (SQL_ID only), the most sampled first */
+        @Getter private List<String> plansA = Collections.emptyList();
+        @Getter private List<String> plansB = Collections.emptyList();
 
         Item(String value, Measure measure) {
             this.value = value;
@@ -152,6 +192,11 @@ public class PeriodComparison {
         /** Change in percent, NaN when not in A */
         public double getChange() {
             return samplesA == 0 ? Double.NaN : getDelta() * 100 / getA();
+        }
+
+        /** B used a plan not seen in A */
+        public boolean isPlanChanged() {
+            return PeriodComparison.isPlanChanged(plansA, plansB);
         }
 
         public State getState() {
@@ -186,6 +231,8 @@ public class PeriodComparison {
 
         private final Map<String, Counter> byWaitClass = new HashMap<>();
         private final Map<String, Map<String, Counter>> byDimension = new HashMap<>();
+        /** SQL_ID -> plan hash value -> samples (without plan: not kept) */
+        private final Map<String, Map<String, Long>> plans = new HashMap<>();
 
         Period(long begin, long end) {
             this.begin = begin;
@@ -241,15 +288,20 @@ public class PeriodComparison {
         private final SqlColProfile serialCol;
         private final SqlColProfile waitClassCol;
         private final SqlColProfile eventCol;
+        private final SqlColProfile planCol;
+        private final String cpuLabel;
 
         Reader(AshFilter.Matcher matcher, Map<String, SqlColProfile> dimensionCols, SqlColProfile sessionCol,
-               SqlColProfile serialCol, SqlColProfile waitClassCol, SqlColProfile eventCol) {
+               SqlColProfile serialCol, SqlColProfile waitClassCol, SqlColProfile eventCol, SqlColProfile planCol,
+               String cpuLabel) {
             this.matcher = matcher;
             this.dimensionCols = dimensionCols;
             this.sessionCol = sessionCol;
             this.serialCol = serialCol;
             this.waitClassCol = waitClassCol;
             this.eventCol = eventCol;
+            this.planCol = planCol;
+            this.cpuLabel = cpuLabel;
         }
 
         Period read(StoreManager storeManager, long[] range, BooleanSupplier stale) {
@@ -269,8 +321,8 @@ public class PeriodComparison {
                         if (!matcher.matches(sl, i)) {
                             continue;
                         }
-                        String waitClass = value(waitClassCol, sl, i);
-                        String event = value(eventCol, sl, i);
+                        String waitClass = cpuIfEmpty(value(waitClassCol, sl, i));
+                        String event = cpuIfEmpty(value(eventCol, sl, i));
                         period.rows++;
                         if (Options.LBL_CPU.equals(waitClass) || Options.LBL_PG_CPU.equals(waitClass)) {
                             period.cpuRows++;
@@ -279,9 +331,17 @@ public class PeriodComparison {
                         for (Map.Entry<String, SqlColProfile> d : dimensionCols.entrySet()) {
                             String v = SESSION.equals(d.getKey())
                                     ? value(sessionCol, sl, i) + "," + value(serialCol, sl, i)
-                                    : value(d.getValue(), sl, i);
+                                    : d.getValue() == eventCol ? event : value(d.getValue(), sl, i);
                             period.byDimension.computeIfAbsent(d.getKey(), k -> new HashMap<>())
                                     .computeIfAbsent(v, k -> new Counter()).add(event);
+                        }
+                        if (planCol != null) {
+                            String sqlId = value(dimensionCols.get(SQL_ID), sl, i);
+                            String plan = value(planCol, sl, i);
+                            // 0: no plan (PL/SQL call, statement being parsed)
+                            if (!sqlId.isEmpty() && !plan.isEmpty() && !"0".equals(plan)) {
+                                period.plans.computeIfAbsent(sqlId, k -> new HashMap<>()).merge(plan, 1L, Long::sum);
+                            }
                         }
                     }
                 }
@@ -290,6 +350,10 @@ public class PeriodComparison {
             }
             collectedTime(period, keys);
             return period;
+        }
+
+        private String cpuIfEmpty(String value) {
+            return value.isEmpty() && cpuLabel != null ? cpuLabel : value;
         }
 
         private String value(SqlColProfile col, MainData sl, int row) {

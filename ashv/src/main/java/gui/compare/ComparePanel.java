@@ -478,6 +478,11 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         }
         appendCoverage(warnings, "A", a);
         appendCoverage(warnings, "B", b);
+        long planChanges = result.hasPlans() ? result.planChanges() : 0;
+        if (planChanges > 0) {
+            warnings.append(" &nbsp;&nbsp; <font color='#e0a030'><b>⚠ ").append(planChanges).append(" ")
+                    .append(Labels.getLabel("gui.compare.planchanges")).append("</b></font>");
+        }
         if (warnings.length() > 0) {
             sb.append("<br>").append(warnings.substring(" &nbsp;&nbsp; ".length()));
         }
@@ -510,13 +515,13 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         }
         List<String> header = new ArrayList<>();
         for (int col = 0; col < lastItems.getColumnCount(); col++) {
-            if (col != ItemsModel.COL_BAR) header.add(lastItems.getColumnName(col));
+            if (exported(col)) header.add(lastItems.getColumnName(col));
         }
         List<Object[]> rows = new ArrayList<>();
         for (int row = 0; row < lastItems.getRowCount(); row++) {
             List<Object> values = new ArrayList<>();
             for (int col = 0; col < lastItems.getColumnCount(); col++) {
-                if (col == ItemsModel.COL_BAR) continue;
+                if (!exported(col)) continue;
                 Object v = lastItems.getValueAt(row, col);
                 values.add(v instanceof Double && ((Double) v).isNaN() ? null : v);
             }
@@ -526,6 +531,11 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         CsvExport.save(this, CsvExport.fileName(
                 storeManager.getConfigurationManager().getCurrentConfiguration().getConfigName(),
                 "Comparacao_" + dimensionBox.getSelectedItem(), b.getBegin(), b.getEnd()), header, rows);
+    }
+
+    /** CSV without the bar and, when not shown, the plan */
+    private boolean exported(int col) {
+        return col != ItemsModel.COL_BAR && (col != ItemsModel.COL_PLAN || lastItems.showPlans);
     }
 
     private static JXTable table(ItemsModel model) {
@@ -539,6 +549,12 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         boolean dark = Themes.isDark();
         table.addHighlighter(new ColorHighlighter(deltaPredicate(true), null, increaseColor(dark), null, null));
         table.addHighlighter(new ColorHighlighter(deltaPredicate(false), null, decreaseColor(dark), null, null));
+        // new plan in B: warning color
+        table.addHighlighter(new ColorHighlighter((renderer, adapter) ->
+                adapter.convertColumnIndexToModel(adapter.column) == ItemsModel.COL_PLAN
+                        && ((ItemsModel) ((JTable) adapter.getComponent()).getModel())
+                        .isPlanChanged(adapter.convertRowIndexToModel(adapter.row)),
+                null, dark ? new Color(240, 170, 60) : new Color(190, 110, 0), null, null));
         table.setDefaultRenderer(String.class, new DefaultTableCellRenderer() {
             @Override
             protected void setValue(Object value) {
@@ -553,6 +569,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         }
         table.getColumnExt(ItemsModel.COL_BAR).setPreferredWidth(220);
         table.getColumnExt(ItemsModel.COL_BAR).setMinWidth(80);
+        table.getColumnExt(ItemsModel.COL_PLAN).setVisible(model.showPlans);
         return table;
     }
 
@@ -766,10 +783,13 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         static final int COL_SHARE_A = 6;
         static final int COL_SHARE = 7;
         static final int COL_STATE = 8;
-        static final int COL_EVENT = 9;
+        static final int COL_PLAN = 9;
+        static final int COL_EVENT = 10;
 
         private final String valueName;
         private final List<PeriodComparison.Item> items;
+        /** Plan column shown: SQL_ID with plans collected */
+        final boolean showPlans;
         private final double totalA;
         private final double totalB;
         final PeriodComparison.Measure measure;
@@ -780,6 +800,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                    PeriodComparison.Measure measure) {
             this.valueName = valueName;
             this.items = items;
+            this.showPlans = result.hasPlans() && items.stream().anyMatch(i -> !i.getPlansB().isEmpty() || !i.getPlansA().isEmpty());
             this.totalA = result.getA().total(measure);
             this.totalB = result.getB().total(measure);
             this.measure = measure;
@@ -790,8 +811,28 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             return items.get(row).getState();
         }
 
+        boolean isPlanChanged(int row) {
+            return items.get(row).isPlanChanged();
+        }
+
+        /** "⚠ A → B" when B used a new plan, otherwise the plans of the period(s) */
+        private static String plan(PeriodComparison.Item item) {
+            List<String> a = item.getPlansA();
+            List<String> b = item.getPlansB();
+            if (item.isPlanChanged()) {
+                return "⚠ " + plans(a) + " → " + plans(b);
+            }
+            List<String> shown = b.isEmpty() ? a : b;
+            return shown.isEmpty() ? "—" : plans(shown);
+        }
+
+        private static String plans(List<String> plans) {
+            return String.join(" / ", plans.subList(0, Math.min(3, plans.size())))
+                    + (plans.size() > 3 ? " / ..." : "");
+        }
+
         @Override public int getRowCount() { return items.size(); }
-        @Override public int getColumnCount() { return 10; }
+        @Override public int getColumnCount() { return 11; }
 
         @Override
         public String getColumnName(int column) {
@@ -805,6 +846,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                 case COL_SHARE_A: return Labels.getLabel("gui.compare.col.share.a");
                 case COL_SHARE: return Labels.getLabel("gui.compare.col.share");
                 case COL_STATE: return Labels.getLabel("gui.compare.col.state");
+                case COL_PLAN: return Labels.getLabel("gui.compare.col.plan");
                 default: return Labels.getLabel("gui.compare.col.event");
             }
         }
@@ -832,6 +874,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                 case COL_SHARE_A: return totalA == 0 ? 0.0 : item.getA() * 100 / totalA;
                 case COL_SHARE: return totalB == 0 ? 0.0 : item.getB() * 100 / totalB;
                 case COL_STATE: return Labels.getLabel("gui.compare.state." + item.getState().name().toLowerCase());
+                case COL_PLAN: return plan(item);
                 default: return item.getTopEvent();
             }
         }

@@ -24,7 +24,11 @@ public class OracleSE extends OracleEE implements IProfile {
             + "vs.service_name SERVICE_NAME, vs.sql_hash_value SQL_HASH_VALUE, "
             // v$session has no serial# of the blocker: looked up only for blocked rows of this instance
             + "(CASE WHEN vs.blocking_session IS NOT NULL AND vs.blocking_instance = USERENV('INSTANCE') "
-            + "THEN (SELECT b.serial# FROM v$session b WHERE b.sid = vs.blocking_session) END) BLOCKING_SESSION_SERIAL# "
+            + "THEN (SELECT b.serial# FROM v$session b WHERE b.sid = vs.blocking_session) END) BLOCKING_SESSION_SERIAL#, "
+            // plan of the running child cursor (v$session has no plan hash): compare periods shows plan changes
+            + "vs.sql_exec_id SQL_EXEC_ID, "
+            + "(CASE WHEN vs.sql_id IS NOT NULL THEN (SELECT s.plan_hash_value FROM v$sql s "
+            + "WHERE s.sql_id = vs.sql_id AND s.child_number = vs.sql_child_number AND rownum = 1) END) SQL_PLAN_HASH_VALUE "
             + "FROM "
             + "v$session vs, v$sesstat vss, audit_actions au "
             + "WHERE vs.sid != ( select distinct sid from v$mystat  where rownum < 2 ) "
