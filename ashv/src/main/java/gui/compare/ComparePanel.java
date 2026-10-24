@@ -21,6 +21,8 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Rectangle;
 import java.awt.event.HierarchyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.Duration;
@@ -30,9 +32,13 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import javax.swing.JButton;
@@ -98,6 +104,10 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     private final Timer chartTimerA = new Timer(500, e -> loadChart(true));
     private final Timer chartTimerB = new Timer(500, e -> loadChart(false));
     private boolean chartsPending;
+    /** Charts show only one item of the tables (double click), on top of the filters */
+    private Map<String, Set<String>> focus;
+    private final JLabel focusLabel = new JLabel();
+    private final JPanel focusBar = new JPanel(new MigLayout("ins 2 4 2 4", "[][]"));
 
     private final AtomicInteger generation = new AtomicInteger();
     private volatile long[] selectedRange;
@@ -159,6 +169,14 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         top.add(yesterday, "gapleft 12");
         top.add(lastWeek);
         top.add(previous, "wrap");
+        JButton showAll = new JButton(Labels.getLabel("gui.compare.focus.all"));
+        showAll.addActionListener(e -> setFocus(null, null));
+        focusLabel.setFont(focusLabel.getFont().deriveFont(Font.BOLD));
+        Themes.foreground(focusLabel, new Color(190, 110, 0), new Color(240, 170, 60));
+        focusBar.add(focusLabel);
+        focusBar.add(showAll, "gapleft 12");
+        focusBar.setVisible(false);
+        top.add(focusBar, "span, hidemode 3, alignx left, wrap");
         top.add(chartA, "span, grow, wrap");
         top.add(new JLabel(Labels.getLabel("gui.compare.period.b")));
         top.add(startB);
@@ -192,6 +210,9 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         itemsBar.add(new JLabel(Labels.getLabel("gui.compare.by")));
         itemsBar.add(dimensionBox);
         itemsBar.add(export, "gapleft 12");
+        JLabel focusHint = new JLabel(Labels.getLabel("gui.compare.focus.hint"));
+        focusHint.setEnabled(false);
+        itemsBar.add(focusHint, "gapleft 16");
         JPanel itemsPanel = new JPanel(new BorderLayout());
         itemsPanel.add(itemsBar, BorderLayout.NORTH);
         itemsPanel.add(itemsContent, BorderLayout.CENTER);
@@ -289,7 +310,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             return;
         }
         List<SqlColProfile> cols = storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList();
-        chart.load(range, ashFilter.matcher(cols == null ? Collections.emptyList() : cols),
+        List<SqlColProfile> colList = cols == null ? Collections.<SqlColProfile>emptyList() : cols;
+        chart.load(range, focus == null ? ashFilter.matcher(colList) : ashFilter.matcherWith(colList, focus),
                 storeManager.getConfigurationManager().getIProfile());
     }
 
@@ -311,6 +333,55 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         }
         long[] both = {Math.min(a[0], b[0]), Math.max(a[1], b[1])};
         return both[1] - both[0] <= 26 * HOUR ? both : b;
+    }
+
+    /** Double click on a row: the charts show only that item (the same conditions as the right click menu) */
+    private void installFocus(JXTable table, BiFunction<Integer, Integer, List<List<Map.Entry<String, String>>>> conditions,
+                              IProfile iProfile) {
+        table.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() != 2 || !SwingUtilities.isLeftMouseButton(e)) {
+                    return;
+                }
+                int row = table.rowAtPoint(e.getPoint());
+                int col = table.columnAtPoint(e.getPoint());
+                if (row < 0 || col < 0) {
+                    return;
+                }
+                List<List<Map.Entry<String, String>>> entries = conditions.apply(row, col);
+                if (entries != null && !entries.isEmpty()) {
+                    setFocus(entries.get(0), iProfile);
+                }
+            }
+        });
+    }
+
+    /** @param conditions null: all the data (with the filters) */
+    private void setFocus(List<Map.Entry<String, String>> conditions, IProfile iProfile) {
+        if (conditions == null) {
+            focus = null;
+            focusBar.setVisible(false);
+        } else {
+            String cpu = iProfile.getWaitClass((byte) 0);
+            Map<String, Set<String>> f = new LinkedHashMap<>();
+            List<String> text = new ArrayList<>();
+            for (Map.Entry<String, String> c : conditions) {
+                Set<String> values = new LinkedHashSet<>(Collections.singleton(c.getValue()));
+                // on CPU, v$active_session_history has no wait class / event (shown as CPU in the tables)
+                if (c.getValue().equals(cpu) && (c.getKey().equalsIgnoreCase(iProfile.getWaitClassColName())
+                        || c.getKey().equalsIgnoreCase(iProfile.getEventColName()))) {
+                    values.add("");
+                }
+                f.put(c.getKey(), values);
+                text.add(c.getKey() + " = " + (c.getValue().isEmpty() ? Labels.getLabel("gui.filter.empty") : c.getValue()));
+            }
+            focus = f;
+            focusLabel.setText(Labels.getLabel("gui.compare.focus") + " " + String.join("  e  ", text));
+            focusBar.setVisible(true);
+        }
+        revalidate();
+        loadCharts();
     }
 
     /** Both charts up to the highest value of the two */
@@ -398,8 +469,10 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         ItemsModel waitClasses = new ItemsModel(Labels.getLabel("gui.compare.col.waitclass"),
                 result.waitClasses(measure), result, measure);
         JXTable waitClassTable = table(waitClasses);
-        FilterPopup.install(waitClassTable, ashFilter, (row, col) ->
-                conditions(waitClassTable, row, col, iProfile.getWaitClassColName(), iProfile));
+        BiFunction<Integer, Integer, List<List<Map.Entry<String, String>>>> waitClassConditions = (row, col) ->
+                conditions(waitClassTable, row, col, iProfile.getWaitClassColName(), iProfile);
+        FilterPopup.install(waitClassTable, ashFilter, waitClassConditions);
+        installFocus(waitClassTable, waitClassConditions, iProfile);
         setContent(waitClassContent, waitClassTable);
 
         String selected = (String) dimensionBox.getSelectedItem();
@@ -424,7 +497,10 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         lastItems = model;
         JXTable table = table(model);
         IProfile iProfile = lastProfile;
-        FilterPopup.install(table, ashFilter, (row, col) -> conditions(table, row, col, dimension, iProfile));
+        BiFunction<Integer, Integer, List<List<Map.Entry<String, String>>>> itemConditions = (row, col) ->
+                conditions(table, row, col, dimension, iProfile);
+        FilterPopup.install(table, ashFilter, itemConditions);
+        installFocus(table, itemConditions, iProfile);
         if (dimension.endsWith("SQL_ID")) {
             SqlTextTooltip.install(table, (row, col) -> table.convertColumnIndexToModel(col) == ItemsModel.COL_VALUE
                     ? String.valueOf(table.getValueAt(row, col)) : null);

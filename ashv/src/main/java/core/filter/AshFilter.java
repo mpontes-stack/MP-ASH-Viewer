@@ -128,6 +128,16 @@ public class AshFilter {
     }
 
     /**
+     * Matcher for the current conditions plus others (column -> values) that only this task uses;
+     * an extra condition on a filtered column replaces it
+     */
+    public Matcher matcherWith(List<SqlColProfile> colProfiles, Map<String, Set<String>> extra) {
+        Map<String, Set<String>> current = getConditions();
+        current.putAll(extra);
+        return new Matcher(colProfiles, current);
+    }
+
+    /**
      * Evaluates conditions against stored raw rows. Not thread safe, create one per task.
      */
     public class Matcher {
