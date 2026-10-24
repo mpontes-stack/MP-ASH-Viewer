@@ -555,6 +555,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         if (ashFilter.isActive()) {
             sb.append(" &nbsp;&nbsp; <i>").append(Labels.getLabel("gui.compare.filtered")).append("</i>");
         }
+        sb.append("<br>").append(resume(result, measure));
         StringBuilder warnings = new StringBuilder();
         long durationA = a.getEnd() - a.getBegin();
         long durationB = b.getEnd() - b.getBegin();
@@ -573,6 +574,96 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             sb.append("<br>").append(warnings.substring(" &nbsp;&nbsp; ".length()));
         }
         return sb.append("</html>").toString();
+    }
+
+    /**
+     * "Resumo": total change, wait classes behind it and the items (SQL_ID when collected) that moved most
+     */
+    private static String resume(PeriodComparison result, PeriodComparison.Measure measure) {
+        double totalA = result.getA().total(measure);
+        double delta = result.getB().total(measure) - totalA;
+        String unit = Labels.getLabel(measure == PeriodComparison.Measure.TOTAL ? "gui.compare.resume.dbtime" : "gui.compare.aas");
+        String pct = totalA > 0 ? percent(delta * 100 / totalA) : Labels.getLabel("gui.compare.state.new");
+        boolean same = Math.abs(delta) < measure.getMinDelta() || (totalA > 0 && Math.abs(delta) < totalA * 0.05);
+
+        StringBuilder sb = new StringBuilder("<b>").append(Labels.getLabel("gui.compare.resume")).append(":</b> ");
+        List<PeriodComparison.Item> items = itemsForResume(result, measure);
+        String dimension = result.getDimensions().contains(PeriodComparison.SQL_ID) ? PeriodComparison.SQL_ID
+                : result.getDimensions().isEmpty() ? "" : label(result.getDimensions().get(0));
+        if (same) {
+            sb.append(String.format(Labels.getLabel("gui.compare.resume.same"), pct));
+            List<String> moves = new ArrayList<>();
+            items.stream().filter(i -> isUp(i.getState())).findFirst().ifPresent(i -> moves.add(item(i, measure)));
+            items.stream().filter(i -> isDown(i.getState())).reduce((x, y) -> y).ifPresent(i -> moves.add(item(i, measure)));
+            if (!moves.isEmpty()) {
+                sb.append(" ").append(String.format(Labels.getLabel("gui.compare.resume.moves"), dimension))
+                        .append(" ").append(String.join(", ", moves)).append(".");
+            }
+            return sb.toString();
+        }
+
+        boolean up = delta > 0;
+        sb.append(String.format(Labels.getLabel("gui.compare.resume.change"), signed(delta, measure), unit, pct));
+
+        // share of the wait classes that moved the same way
+        List<PeriodComparison.Item> classes = new ArrayList<>(result.waitClasses(measure));
+        classes.removeIf(i -> up ? i.getDelta() <= 0 : i.getDelta() >= 0);
+        double sum = classes.stream().mapToDouble(i -> Math.abs(i.getDelta())).sum();
+        if (!up) Collections.reverse(classes);
+        if (sum > 0 && !classes.isEmpty()) {
+            List<String> parts = new ArrayList<>();
+            for (int i = 0; i < Math.min(2, classes.size()); i++) {
+                double share = Math.abs(classes.get(i).getDelta()) * 100 / sum;
+                if (i > 0 && share < 20) break;
+                parts.add(Math.round(share) + "% " + Labels.getLabel(i > 0 ? "gui.compare.resume.of"
+                        : up ? "gui.compare.resume.up" : "gui.compare.resume.down") + " " + html(classes.get(i).getValue()));
+            }
+            sb.append(" ").append(String.join(" " + Labels.getLabel("gui.compare.resume.and") + " ", parts)).append(".");
+        }
+
+        List<String> top = new ArrayList<>();
+        if (!up) Collections.reverse(items);
+        for (PeriodComparison.Item i : items) {
+            if (top.size() == 3) break;
+            if (up ? isUp(i.getState()) : isDown(i.getState())) top.add(item(i, measure));
+        }
+        if (!top.isEmpty()) {
+            sb.append(" ").append(String.format(Labels.getLabel(up ? "gui.compare.resume.items.up" : "gui.compare.resume.items.down"),
+                    dimension)).append(" ").append(String.join(", ", top)).append(".");
+        }
+        return sb.toString();
+    }
+
+    /** Items of SQL_ID (or the first column) with a value, the biggest increase first */
+    private static List<PeriodComparison.Item> itemsForResume(PeriodComparison result, PeriodComparison.Measure measure) {
+        List<String> dims = result.getDimensions();
+        if (dims.isEmpty()) return new ArrayList<>();
+        String d = dims.contains(PeriodComparison.SQL_ID) ? PeriodComparison.SQL_ID : dims.get(0);
+        // without value (no SQL running, e.g. between calls): nothing to act on
+        List<PeriodComparison.Item> items = new ArrayList<>(result.items(d, measure));
+        items.removeIf(i -> i.getValue().isEmpty());
+        return items;
+    }
+
+    private static boolean isUp(PeriodComparison.State state) {
+        return state == PeriodComparison.State.UP || state == PeriodComparison.State.NEW;
+    }
+
+    private static boolean isDown(PeriodComparison.State state) {
+        return state == PeriodComparison.State.DOWN || state == PeriodComparison.State.GONE;
+    }
+
+    /** "8p042hmdza6a8 +0,10 (novo)" */
+    private static String item(PeriodComparison.Item i, PeriodComparison.Measure measure) {
+        String value = i.getValue().isEmpty() ? Labels.getLabel("gui.filter.empty") : i.getValue();
+        if (value.length() > 40) value = value.substring(0, 37) + "...";
+        String state = i.getState() == PeriodComparison.State.NEW || i.getState() == PeriodComparison.State.GONE
+                ? " (" + Labels.getLabel("gui.compare.state." + i.getState().name().toLowerCase()) + ")" : "";
+        return html(value) + " " + signed(i.getDelta(), measure) + state;
+    }
+
+    private static String html(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static void appendCoverage(StringBuilder sb, String name, PeriodComparison.Period p) {
