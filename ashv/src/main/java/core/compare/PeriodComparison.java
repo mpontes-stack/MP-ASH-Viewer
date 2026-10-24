@@ -27,6 +27,10 @@ public class PeriodComparison {
     /** Dimension with the execution plans of each value */
     public static final String SQL_ID = "SQL_ID";
     private static final String PLAN_COL = "SQL_PLAN_HASH_VALUE";
+    private static final String EXEC_ID_COL = "SQL_EXEC_ID";
+    private static final String EXEC_START_COL = "SQL_EXEC_START";
+    /** Executions or time per execution changed from 20% (B / A): sampled executions are estimates */
+    private static final double CAUSE_RATIO = 1.2;
 
     /** Collection stopped (tunnel down, app closed): not counted as time of the period */
     private static final long MIN_GAP_MS = 60_000;
@@ -64,10 +68,13 @@ public class PeriodComparison {
         SqlColProfile waitClassCol = findCol(cols, iProfile.getWaitClassColName()).orElse(null);
         SqlColProfile eventCol = findCol(cols, iProfile.getEventColName()).orElse(null);
         SqlColProfile planCol = dimensionCols.containsKey(SQL_ID) ? findCol(cols, PLAN_COL).orElse(null) : null;
+        SqlColProfile execIdCol = dimensionCols.containsKey(SQL_ID) ? findCol(cols, EXEC_ID_COL).orElse(null) : null;
+        SqlColProfile execStartCol = findCol(cols, EXEC_START_COL).orElse(null);
 
         // v$active_session_history: no wait class / event when on CPU (as in the charts)
         String cpuLabel = iProfile.getWaitClass((byte) 0);
-        Reader reader = new Reader(matcher, dimensionCols, sessionCol, serialCol, waitClassCol, eventCol, planCol, cpuLabel);
+        Reader reader = new Reader(matcher, dimensionCols, sessionCol, serialCol, waitClassCol, eventCol, planCol, cpuLabel,
+                execIdCol, execStartCol);
         Period a = reader.read(storeManager, rangeA, stale);
         Period b = a == null ? null : reader.read(storeManager, rangeB, stale);
         if (b == null) {
@@ -85,6 +92,8 @@ public class PeriodComparison {
             items.forEach(i -> {
                 i.plansA = plans(a, i.value);
                 i.plansB = plans(b, i.value);
+                i.execA = a.execs.get(i.value);
+                i.execB = b.execs.get(i.value);
             });
         }
         return items;
@@ -95,6 +104,11 @@ public class PeriodComparison {
         return a.plans.keySet().stream()
                 .filter(sql -> isPlanChanged(plans(a, sql), plans(b, sql)))
                 .count();
+    }
+
+    /** Executions were collected (SQL_EXEC_ID) in both periods */
+    public boolean hasExecs() {
+        return !a.execs.isEmpty() && !b.execs.isEmpty();
     }
 
     /** Execution plans were collected (SQL_PLAN_HASH_VALUE) in both periods */
@@ -171,6 +185,9 @@ public class PeriodComparison {
         /** Execution plans (SQL_ID only), the most sampled first */
         @Getter private List<String> plansA = Collections.emptyList();
         @Getter private List<String> plansB = Collections.emptyList();
+        /** Executions seen in the samples (SQL_ID only), null when none */
+        private Executions execA;
+        private Executions execB;
 
         Item(String value, Measure measure) {
             this.value = value;
@@ -194,6 +211,42 @@ public class PeriodComparison {
             return samplesA == 0 ? Double.NaN : getDelta() * 100 / getA();
         }
 
+        /** Executions seen in A, -1 when unknown */
+        public long getExecutionsA() {
+            return execA == null ? -1 : execA.count();
+        }
+
+        public long getExecutionsB() {
+            return execB == null ? -1 : execB.count();
+        }
+
+        /** DB time per execution in seconds, NaN when unknown */
+        public double getTimePerExecA() {
+            return execA == null ? Double.NaN : execA.secondsPerExecution(a);
+        }
+
+        public double getTimePerExecB() {
+            return execB == null ? Double.NaN : execB.secondsPerExecution(b);
+        }
+
+        /** Why it went up or down: more / fewer executions, slower / faster executions, or both */
+        public Cause getCause() {
+            State state = getState();
+            if (execA == null || execB == null || (state != State.UP && state != State.DOWN)) {
+                return Cause.NONE;
+            }
+            double executions = (double) execB.count() / execA.count();
+            double time = getTimePerExecB() / getTimePerExecA();
+            if (state == State.UP) {
+                boolean more = executions >= CAUSE_RATIO;
+                boolean slower = time >= CAUSE_RATIO;
+                return more && slower ? Cause.MORE_AND_SLOWER : more ? Cause.MORE : slower ? Cause.SLOWER : Cause.NONE;
+            }
+            boolean fewer = executions <= 1 / CAUSE_RATIO;
+            boolean faster = time <= 1 / CAUSE_RATIO;
+            return fewer && faster ? Cause.FEWER_AND_FASTER : fewer ? Cause.FEWER : faster ? Cause.FASTER : Cause.NONE;
+        }
+
         /** B used a plan not seen in A */
         public boolean isPlanChanged() {
             return PeriodComparison.isPlanChanged(plansA, plansB);
@@ -212,6 +265,22 @@ public class PeriodComparison {
     }
 
     public enum State { NEW, GONE, UP, DOWN, SAME }
+
+    public enum Cause { NONE, MORE, SLOWER, MORE_AND_SLOWER, FEWER, FASTER, FEWER_AND_FASTER }
+
+    /** Executions of a SQL_ID in a period: SQL_EXEC_ID + SQL_EXEC_START -> samples */
+    static class Executions {
+        private final Map<String, Long> samples = new HashMap<>();
+
+        long count() {
+            return samples.size();
+        }
+
+        double secondsPerExecution(Period period) {
+            long rows = samples.values().stream().mapToLong(Long::longValue).sum();
+            return period.seconds(rows) / samples.size();
+        }
+    }
 
     /** Up from +5%, down from -5% (B compared to A) */
     private static final double CHANGE = 0.05;
@@ -233,6 +302,8 @@ public class PeriodComparison {
         private final Map<String, Map<String, Counter>> byDimension = new HashMap<>();
         /** SQL_ID -> plan hash value -> samples (without plan: not kept) */
         private final Map<String, Map<String, Long>> plans = new HashMap<>();
+        /** SQL_ID -> executions (samples without SQL_EXEC_ID: not kept) */
+        private final Map<String, Executions> execs = new HashMap<>();
 
         Period(long begin, long end) {
             this.begin = begin;
@@ -290,10 +361,12 @@ public class PeriodComparison {
         private final SqlColProfile eventCol;
         private final SqlColProfile planCol;
         private final String cpuLabel;
+        private final SqlColProfile execIdCol;
+        private final SqlColProfile execStartCol;
 
         Reader(AshFilter.Matcher matcher, Map<String, SqlColProfile> dimensionCols, SqlColProfile sessionCol,
                SqlColProfile serialCol, SqlColProfile waitClassCol, SqlColProfile eventCol, SqlColProfile planCol,
-               String cpuLabel) {
+               String cpuLabel, SqlColProfile execIdCol, SqlColProfile execStartCol) {
             this.matcher = matcher;
             this.dimensionCols = dimensionCols;
             this.sessionCol = sessionCol;
@@ -302,6 +375,8 @@ public class PeriodComparison {
             this.eventCol = eventCol;
             this.planCol = planCol;
             this.cpuLabel = cpuLabel;
+            this.execIdCol = execIdCol;
+            this.execStartCol = execStartCol;
         }
 
         Period read(StoreManager storeManager, long[] range, BooleanSupplier stale) {
@@ -334,6 +409,16 @@ public class PeriodComparison {
                                     : d.getValue() == eventCol ? event : value(d.getValue(), sl, i);
                             period.byDimension.computeIfAbsent(d.getKey(), k -> new HashMap<>())
                                     .computeIfAbsent(v, k -> new Counter()).add(event);
+                        }
+                        if (execIdCol != null) {
+                            String sqlId = value(dimensionCols.get(SQL_ID), sl, i);
+                            String execId = value(execIdCol, sl, i);
+                            if (!sqlId.isEmpty() && !execId.isEmpty()) {
+                                // ids restart: the start time tells two executions with the same id apart
+                                String start = execStartCol == null ? "" : value(execStartCol, sl, i);
+                                period.execs.computeIfAbsent(sqlId, k -> new Executions()).samples
+                                        .merge(execId + "|" + start, 1L, Long::sum);
+                            }
                         }
                         if (planCol != null) {
                             String sqlId = value(dimensionCols.get(SQL_ID), sl, i);

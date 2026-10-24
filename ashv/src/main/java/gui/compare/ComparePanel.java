@@ -107,7 +107,9 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     /** Charts show only one item of the tables (double click), on top of the filters */
     private Map<String, Set<String>> focus;
     private final JLabel focusLabel = new JLabel();
-    private final JPanel focusBar = new JPanel(new MigLayout("ins 2 4 2 4", "[][]"));
+    private final JPanel focusBar = new JPanel(new MigLayout("ins 2 8 2 4", "[][]"));
+    /** Fixed above the scrolled content: filter bar and the item shown in the charts */
+    private final JPanel north = new JPanel(new BorderLayout());
 
     private final AtomicInteger generation = new AtomicInteger();
     private volatile long[] selectedRange;
@@ -176,7 +178,6 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         focusBar.add(focusLabel);
         focusBar.add(showAll, "gapleft 12");
         focusBar.setVisible(false);
-        top.add(focusBar, "span, hidemode 3, alignx left, wrap");
         top.add(chartA, "span, grow, wrap");
         top.add(new JLabel(Labels.getLabel("gui.compare.period.b")));
         top.add(startB);
@@ -239,6 +240,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         scroll.setBorder(null);
         scroll.getVerticalScrollBar().setUnitIncrement(24);
         add(scroll, BorderLayout.CENTER);
+        north.add(focusBar, BorderLayout.SOUTH);
+        add(north, BorderLayout.NORTH);
         showMessage(waitClassContent, Labels.getLabel("gui.compare.help"));
 
         ashFilter.addListener(() -> SwingUtilities.invokeLater(() -> {
@@ -317,7 +320,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
 
     /** Filter bar of the tab (the same filter as Top Activity and History) */
     public void setFilterBar(JComponent filterBar) {
-        add(filterBar, BorderLayout.NORTH);
+        north.add(filterBar, BorderLayout.CENTER);
         revalidate();
     }
 
@@ -596,7 +599,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             items.stream().filter(i -> isUp(i.getState())).findFirst().ifPresent(i -> moves.add(item(i, measure)));
             items.stream().filter(i -> isDown(i.getState())).reduce((x, y) -> y).ifPresent(i -> moves.add(item(i, measure)));
             if (!moves.isEmpty()) {
-                sb.append(" ").append(String.format(Labels.getLabel("gui.compare.resume.moves"), dimension))
+                sb.append("<br>&nbsp;&nbsp;&nbsp;").append(String.format(Labels.getLabel("gui.compare.resume.moves"), dimension))
                         .append(" ").append(String.join(", ", moves)).append(".");
             }
             return sb.toString();
@@ -628,7 +631,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             if (up ? isUp(i.getState()) : isDown(i.getState())) top.add(item(i, measure));
         }
         if (!top.isEmpty()) {
-            sb.append(" ").append(String.format(Labels.getLabel(up ? "gui.compare.resume.items.up" : "gui.compare.resume.items.down"),
+            sb.append("<br>&nbsp;&nbsp;&nbsp;").append(String.format(Labels.getLabel(up ? "gui.compare.resume.items.up" : "gui.compare.resume.items.down"),
                     dimension)).append(" ").append(String.join(", ", top)).append(".");
         }
         return sb.toString();
@@ -659,7 +662,9 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         if (value.length() > 40) value = value.substring(0, 37) + "...";
         String state = i.getState() == PeriodComparison.State.NEW || i.getState() == PeriodComparison.State.GONE
                 ? " (" + Labels.getLabel("gui.compare.state." + i.getState().name().toLowerCase()) + ")" : "";
-        return html(value) + " " + signed(i.getDelta(), measure) + state;
+        String cause = i.getCause() == PeriodComparison.Cause.NONE ? ""
+                : " — " + Labels.getLabel("gui.compare.cause." + i.getCause().name().toLowerCase());
+        return html(value) + " " + signed(i.getDelta(), measure) + state + cause;
     }
 
     private static String html(String text) {
@@ -712,7 +717,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
 
     /** CSV without the bar and, when not shown, the plan */
     private boolean exported(int col) {
-        return col != ItemsModel.COL_BAR && (col != ItemsModel.COL_PLAN || lastItems.showPlans);
+        return col != ItemsModel.COL_BAR && (col != ItemsModel.COL_PLAN || lastItems.showPlans)
+                && (col < ItemsModel.COL_CAUSE || col > ItemsModel.COL_TPE_B || lastItems.showExecs);
     }
 
     private static JXTable table(ItemsModel model) {
@@ -739,6 +745,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             }
         });
         table.getColumnExt(ItemsModel.COL_BAR).setCellRenderer(new DeltaBarRenderer());
+        // no cause: blank, not "(vazio)"
+        table.getColumnExt(ItemsModel.COL_CAUSE).setCellRenderer(new DefaultTableCellRenderer());
         table.packAll();
         for (int i = 0; i < table.getColumnCount(); i++) {
             table.getColumnModel().getColumn(i).setPreferredWidth(
@@ -746,7 +754,22 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         }
         table.getColumnExt(ItemsModel.COL_BAR).setPreferredWidth(220);
         table.getColumnExt(ItemsModel.COL_BAR).setMinWidth(80);
-        table.getColumnExt(ItemsModel.COL_PLAN).setVisible(model.showPlans);
+        String execsTip = Labels.getLabel("gui.compare.col.exec.tooltip");
+        String tpeTip = Labels.getLabel("gui.compare.col.tpe.tooltip");
+        table.getColumnExt(ItemsModel.COL_EXEC_A).setToolTipText(execsTip);
+        table.getColumnExt(ItemsModel.COL_EXEC_B).setToolTipText(execsTip);
+        table.getColumnExt(ItemsModel.COL_TPE_A).setToolTipText(tpeTip);
+        table.getColumnExt(ItemsModel.COL_TPE_B).setToolTipText(tpeTip);
+        table.getColumnExt(ItemsModel.COL_CAUSE).setToolTipText(Labels.getLabel("gui.compare.col.cause.tooltip"));
+        // hide after taking the columns by index (view index = model index while all are visible)
+        List<org.jdesktop.swingx.table.TableColumnExt> columns = new ArrayList<>();
+        for (int i = 0; i < model.getColumnCount(); i++) {
+            columns.add(table.getColumnExt(i));
+        }
+        for (int i = ItemsModel.COL_CAUSE; i <= ItemsModel.COL_TPE_B; i++) {
+            columns.get(i).setVisible(model.showExecs);
+        }
+        columns.get(ItemsModel.COL_PLAN).setVisible(model.showPlans);
         return table;
     }
 
@@ -879,6 +902,10 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                 setText(Double.isNaN(v) ? "—" : percent(v));
             } else if (modelCol == ItemsModel.COL_DELTA) {
                 setText(signed(v, measure));
+            } else if (modelCol == ItemsModel.COL_EXEC_A || modelCol == ItemsModel.COL_EXEC_B) {
+                setText(v < 0 ? "—" : new DecimalFormat("#,##0", PT_BR).format(v));
+            } else if (modelCol == ItemsModel.COL_TPE_A || modelCol == ItemsModel.COL_TPE_B) {
+                setText(Double.isNaN(v) ? "—" : time(v));
             } else if (modelCol == ItemsModel.COL_SHARE || modelCol == ItemsModel.COL_SHARE_A) {
                 setText(new DecimalFormat("0", PT_BR).format(v) + "%");
             } else {
@@ -1007,13 +1034,20 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         static final int COL_SHARE_A = 6;
         static final int COL_SHARE = 7;
         static final int COL_STATE = 8;
-        static final int COL_PLAN = 9;
-        static final int COL_EVENT = 10;
+        static final int COL_CAUSE = 9;
+        static final int COL_EXEC_A = 10;
+        static final int COL_EXEC_B = 11;
+        static final int COL_TPE_A = 12;
+        static final int COL_TPE_B = 13;
+        static final int COL_PLAN = 14;
+        static final int COL_EVENT = 15;
 
         private final String valueName;
         private final List<PeriodComparison.Item> items;
         /** Plan column shown: SQL_ID with plans collected */
         final boolean showPlans;
+        /** Execution columns shown: SQL_ID with executions collected */
+        final boolean showExecs;
         private final double totalA;
         private final double totalB;
         final PeriodComparison.Measure measure;
@@ -1024,6 +1058,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                    PeriodComparison.Measure measure) {
             this.valueName = valueName;
             this.items = items;
+            this.showExecs = result.hasExecs() && items.stream().anyMatch(i -> i.getExecutionsA() >= 0 || i.getExecutionsB() >= 0);
             this.showPlans = result.hasPlans() && items.stream().anyMatch(i -> !i.getPlansB().isEmpty() || !i.getPlansA().isEmpty());
             this.totalA = result.getA().total(measure);
             this.totalB = result.getB().total(measure);
@@ -1056,7 +1091,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         }
 
         @Override public int getRowCount() { return items.size(); }
-        @Override public int getColumnCount() { return 11; }
+        @Override public int getColumnCount() { return 16; }
 
         @Override
         public String getColumnName(int column) {
@@ -1070,6 +1105,11 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                 case COL_SHARE_A: return Labels.getLabel("gui.compare.col.share.a");
                 case COL_SHARE: return Labels.getLabel("gui.compare.col.share");
                 case COL_STATE: return Labels.getLabel("gui.compare.col.state");
+                case COL_CAUSE: return Labels.getLabel("gui.compare.col.cause");
+                case COL_EXEC_A: return Labels.getLabel("gui.compare.col.exec.a");
+                case COL_EXEC_B: return Labels.getLabel("gui.compare.col.exec.b");
+                case COL_TPE_A: return Labels.getLabel("gui.compare.col.tpe.a");
+                case COL_TPE_B: return Labels.getLabel("gui.compare.col.tpe.b");
                 case COL_PLAN: return Labels.getLabel("gui.compare.col.plan");
                 default: return Labels.getLabel("gui.compare.col.event");
             }
@@ -1082,7 +1122,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
 
         @Override
         public Class<?> getColumnClass(int column) {
-            return column >= COL_A && column <= COL_SHARE ? Double.class : String.class;
+            return (column >= COL_A && column <= COL_SHARE) || (column >= COL_EXEC_A && column <= COL_TPE_B)
+                    ? Double.class : String.class;
         }
 
         @Override
@@ -1098,6 +1139,11 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                 case COL_SHARE_A: return totalA == 0 ? 0.0 : item.getA() * 100 / totalA;
                 case COL_SHARE: return totalB == 0 ? 0.0 : item.getB() * 100 / totalB;
                 case COL_STATE: return Labels.getLabel("gui.compare.state." + item.getState().name().toLowerCase());
+                case COL_CAUSE: return Labels.getLabel("gui.compare.cause." + item.getCause().name().toLowerCase());
+                case COL_EXEC_A: return (double) item.getExecutionsA();
+                case COL_EXEC_B: return (double) item.getExecutionsB();
+                case COL_TPE_A: return item.getTimePerExecA();
+                case COL_TPE_B: return item.getTimePerExecB();
                 case COL_PLAN: return plan(item);
                 default: return item.getTopEvent();
             }
