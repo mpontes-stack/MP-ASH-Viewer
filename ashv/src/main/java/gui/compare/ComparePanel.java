@@ -16,8 +16,10 @@ import gui.util.Themes;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.awt.Rectangle;
 import java.awt.event.HierarchyEvent;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
@@ -41,6 +43,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
+import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -203,11 +206,18 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         bottom.add(split, BorderLayout.CENTER);
 
         // charts / results: the divider gives more room to one or the other
+        // bigger charts push the tables down (scroll bar) instead of squeezing them
         JSplitPane outer = new JSplitPane(JSplitPane.VERTICAL_SPLIT, top, bottom);
         outer.setDividerLocation(440);
-        outer.setResizeWeight(0.5);
+        outer.setResizeWeight(0);
         outer.setOneTouchExpandable(true);
-        add(outer, BorderLayout.CENTER);
+        bottom.setMinimumSize(new Dimension(0, 60));
+        ScrollContent content = new ScrollContent(outer);
+        outer.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> content.revalidate());
+        JScrollPane scroll = new JScrollPane(content);
+        scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(24);
+        add(scroll, BorderLayout.CENTER);
         showMessage(waitClassContent, Labels.getLabel("gui.compare.help"));
 
         ashFilter.addListener(() -> SwingUtilities.invokeLater(() -> {
@@ -708,6 +718,53 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                 setText(v == 0 ? "—" : format(v, measure));
             }
             return this;
+        }
+    }
+
+    /**
+     * Whole tab in a scroll pane: as wide as the window, at least as tall as the charts (divider) plus
+     * {@link #MIN_TABLES_HEIGHT} for the tables, taller when the window is
+     */
+    private static final class ScrollContent extends JPanel implements Scrollable {
+        private static final int MIN_TABLES_HEIGHT = 460;
+        private final JSplitPane split;
+
+        ScrollContent(JSplitPane split) {
+            super(new BorderLayout());
+            this.split = split;
+            add(split, BorderLayout.CENTER);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return new Dimension(super.getPreferredSize().width,
+                    split.getDividerLocation() + split.getDividerSize() + MIN_TABLES_HEIGHT);
+        }
+
+        @Override
+        public Dimension getPreferredScrollableViewportSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        public int getScrollableUnitIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return 24;
+        }
+
+        @Override
+        public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
+            return Math.max(24, visibleRect.height - 48);
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportWidth() {
+            return true;
+        }
+
+        @Override
+        public boolean getScrollableTracksViewportHeight() {
+            // fill the window while everything fits
+            return getParent() != null && getParent().getHeight() >= getPreferredSize().height;
         }
     }
 
