@@ -460,7 +460,8 @@ public class SnapshotPanel extends JPanel {
             } catch (NumberFormatException ignore) {
                 // UNLIMITED
             }
-            limitsModel.addRow(new Object[]{str(row[0]), current, num(row[2]), limitText, pct});
+            // no peak inside a PDB
+            limitsModel.addRow(new Object[]{str(row[0]), current, row[2] == null ? "—" : (Object) num(row[2]), limitText, pct});
         }
         limitsSummary.setText(worst == 0 ? " " : "<html>" + Labels.getLabel("gui.snapshot.limits.worst") + " <b>"
                 + esc(worstName) + "</b>: " + colorPct(worst) + "</html>");

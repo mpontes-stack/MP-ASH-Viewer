@@ -11,6 +11,12 @@ public final class OracleSnapshotQueries {
     public static final String SESSIONS_BY_TYPE = "sessionsByType";
     public static final String SESSIONS_USER = "sessionsUser";
     public static final String LIMITS = "limits";
+
+    private static String limitInPdb(String resource, String view) {
+        return "SELECT '" + resource + "', (SELECT COUNT(*) FROM " + view + "), NULL, "
+                + "(SELECT value FROM v$parameter WHERE name = '" + resource + "') FROM dual "
+                + "WHERE NOT EXISTS (SELECT 1 FROM v$resource_limit WHERE resource_name = '" + resource + "')";
+    }
     public static final String PGA_STAT = "pgaStat";
     public static final String PGA_LIMIT = "pgaLimit";
     public static final String PGA_TOP = "pgaTop";
@@ -46,10 +52,16 @@ public final class OracleSnapshotQueries {
                 + "FROM v$session WHERE type = 'USER' "
                 + "GROUP BY username, machine, program, module, status");
 
+        // inside a PDB v$resource_limit has no rows (they belong to the CDB): count and parameter instead, no peak
         q.put(LIMITS,
                 "SELECT resource_name, current_utilization, max_utilization, limit_value "
                 + "FROM v$resource_limit "
-                + "WHERE resource_name IN ('processes', 'sessions', 'transactions', 'parallel_max_servers')");
+                + "WHERE resource_name IN ('processes', 'sessions', 'transactions', 'parallel_max_servers') "
+                + "UNION ALL "
+                + limitInPdb("processes", "v$process") + " UNION ALL "
+                + limitInPdb("sessions", "v$session") + " UNION ALL "
+                + limitInPdb("transactions", "v$transaction") + " UNION ALL "
+                + limitInPdb("parallel_max_servers", "v$px_process"));
 
         q.put(LOCKS,
                 "SELECT s.sid, s.serial#, s.username, s.status, s.machine, s.program, s.sql_id, "
@@ -160,7 +172,7 @@ public final class OracleSnapshotQueries {
         v.put(HEADER, "V$INSTANCE, V$DATABASE");
         v.put(SESSIONS_BY_TYPE, "V$SESSION");
         v.put(SESSIONS_USER, "V$SESSION");
-        v.put(LIMITS, "V$RESOURCE_LIMIT");
+        v.put(LIMITS, "V$RESOURCE_LIMIT, V$PARAMETER");
         v.put(PGA_STAT, "V$PGASTAT");
         v.put(PGA_LIMIT, "V$PARAMETER");
         v.put(PGA_TOP, "V$SESSION, V$PROCESS");
