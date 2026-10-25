@@ -14,6 +14,7 @@ import gui.BasicFrame;
 import gui.MainTabbedPane;
 import gui.MonitorDbPanel;
 import gui.chart.ChartDatasetManager;
+import gui.admin.ImportDialog;
 import gui.custom.DatabaseIcon;
 import gui.custom.AppLogo;
 import gui.custom.HintTextField;
@@ -478,6 +479,10 @@ public class ConnectToDbArea extends JDialog {
         configOtherJPanel.add(securityContainerPanel,    "span, growx, wmin 100");
 
         jButtonConnect.addActionListener(e -> {
+            // imported histories have no URL: they open offline
+            if (urlTF.getText().trim().isEmpty() && !isOffline.isSelected()) {
+                isOffline.setSelected(true);
+            }
             if (isOffline.isSelected()){
                 ProgressBarUtil.runProgressDialog(this::loadObjectsByConnectionNameOffline,
                         jFrame, Labels.getLabel("gui.connection.loading.label") + " " + connNameTF.getText());
@@ -595,6 +600,14 @@ public class ConnectToDbArea extends JDialog {
         buttonPanel.add(jButtonEditConfig, "gap 1");
         buttonPanel.add(jButtonSaveConfig, "gap 1");
         buttonPanel.add(jButtonCancel, "gap 1");
+        // a history backup (.zip) into a new connection or one with an empty history
+        JButton jButtonImport = new JButton(Labels.getLabel("gui.import.open"));
+        jButtonImport.setToolTipText(Labels.getLabel("gui.import.open.tooltip"));
+        jButtonImport.addActionListener(e -> ImportDialog.open(jFrame, configurationManager, () -> {
+            configurationManager.assignDefaultGroups();
+            this.loadConfigToGui();
+        }));
+        buttonPanel.add(jButtonImport, "gapleft 12");
 
         connJTabbedPane.add(configMainJPanel, Labels.getLabel("gui.connection.connection.main"));
         connJTabbedPane.add(configOtherJPanel, Labels.getLabel("gui.connection.connection.other"));

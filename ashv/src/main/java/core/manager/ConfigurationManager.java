@@ -321,6 +321,12 @@ public class ConfigurationManager {
       EncryptionType encryptionType = configProfile.getEncryptionType();
       ContainerType containerType = configProfile.getContainerType();
 
+      // histories imported from a backup (and offline only connections) keep no password
+      if (!ContainerType.REGISTRY.equals(containerType) && configProfile.getKey() == null
+              && (configProfile.getConnProfile() == null || configProfile.getConnProfile().getPassword() == null)) {
+          return "";
+      }
+
       if (encryptionType == null && containerType == null) {
           try {
               return passConfig.decrypt(configProfile.getConnProfile().getPassword());

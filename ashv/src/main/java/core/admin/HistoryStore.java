@@ -212,7 +212,16 @@ public final class HistoryStore {
     }
 
     /** Steps of a purge, for a progress bar */
-    public enum Step { COUNT, DELETE, COMPACT }
+    public enum Step {
+        COUNT, DELETE, COMPACT(true), COPY, ZIP(true), UNZIP(true), MERGE;
+
+        /** done / total are bytes */
+        public final boolean bytes;
+
+        Step() { this(false); }
+
+        Step(boolean bytes) { this.bytes = bytes; }
+    }
 
     public interface Progress {
         /**
@@ -313,10 +322,14 @@ public final class HistoryStore {
         progress.update(Step.COMPACT, toFree, toFree);
     }
 
-    private static Opened open(String name, boolean readOnly) {
-        File dir = new File(databaseDir(), name);
+    static Opened open(String name, boolean readOnly) {
+        return openDir(new File(databaseDir(), name), readOnly, false);
+    }
+
+    /** A history folder (also outside database/, e.g. a backup being exported or imported) */
+    static Opened openDir(File dir, boolean readOnly, boolean create) {
         EnvironmentConfig envConfig = new EnvironmentConfig();
-        envConfig.setAllowCreate(false);
+        envConfig.setAllowCreate(create);
         envConfig.setReadOnly(readOnly);
         envConfig.setTransactional(false);
         // the app may run with a small heap (-Xmx128m)
@@ -324,7 +337,7 @@ public final class HistoryStore {
         Environment env = new Environment(dir, envConfig);
         try {
             StoreConfig storeConfig = new StoreConfig();
-            storeConfig.setAllowCreate(!readOnly);
+            storeConfig.setAllowCreate(!readOnly || create);
             storeConfig.setReadOnly(readOnly);
             storeConfig.setTransactional(false);
             storeConfig.setDeferredWrite(!readOnly);
@@ -335,7 +348,7 @@ public final class HistoryStore {
         }
     }
 
-    private static final class Opened implements AutoCloseable {
+    static final class Opened implements AutoCloseable {
         final Environment env;
         final EntityStore store;
 
@@ -364,7 +377,7 @@ public final class HistoryStore {
         return files != null && files.length == 0;
     }
 
-    private static long size(File dir) {
+    static long size(File dir) {
         File[] files = dir.listFiles();
         return files == null ? 0 : Arrays.stream(files).filter(File::isFile).mapToLong(File::length).sum();
     }

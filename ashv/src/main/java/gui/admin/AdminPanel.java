@@ -18,7 +18,6 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSeparator;
 import javax.swing.JTable;
@@ -31,6 +30,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import lombok.extern.slf4j.Slf4j;
 import net.miginfocom.swing.MigLayout;
 import org.jdesktop.swingx.JXTable;
+import core.manager.ConfigurationManager;
 import store.StoreManager;
 
 /**
@@ -52,16 +52,16 @@ public class AdminPanel extends JPanel {
     private final JButton refresh = new JButton(Labels.getLabel("gui.admin.refresh"));
     private final JButton purgeOld = new JButton(Labels.getLabel("gui.admin.purge.old"));
     private final JButton purgeAll = new JButton(Labels.getLabel("gui.admin.purge.all"));
-    private final JProgressBar progressBar = new JProgressBar(0, 1000);
-    private final JButton cancel = new JButton(Labels.getLabel("gui.admin.cancel"));
-    private final java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
-    private final JLabel progressText = new JLabel(" ");
+    private final JButton export = new JButton(Labels.getLabel("gui.admin.export"));
+    private final TaskProgress progress = new TaskProgress();
+    private final ConfigurationManager configurationManager;
     private boolean loaded;
     private volatile int generation;
 
     public AdminPanel(StoreManager storeManager) {
         super(new BorderLayout());
         this.storeManager = storeManager;
+        this.configurationManager = storeManager.getConfigurationManager();
 
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setColumnControlVisible(true);
@@ -73,6 +73,8 @@ public class AdminPanel extends JPanel {
         purgeOld.addActionListener(e -> purgeOld());
         purgeAll.setToolTipText(Labels.getLabel("gui.admin.purge.all.tooltip"));
         purgeAll.addActionListener(e -> purgeAll());
+        export.setToolTipText(Labels.getLabel("gui.admin.export.tooltip"));
+        export.addActionListener(e -> export());
 
         JPanel top = new JPanel(new MigLayout("fillx, ins 8 8 4 8", "[grow, fill]"));
         top.add(title(Labels.getLabel("gui.admin.history")), "split 2, gapbottom 2");
@@ -83,24 +85,13 @@ public class AdminPanel extends JPanel {
         help.setEnabled(false);
         top.add(help, "wrap");
 
-        JPanel buttons = new JPanel(new MigLayout("ins 4 8 8 8, hidemode 3", "[][][]16[grow]"));
+        JPanel buttons = new JPanel(new MigLayout("ins 4 8 8 8, hidemode 3", "[][][]16[]16[grow]"));
         buttons.add(refresh);
         buttons.add(purgeOld);
         buttons.add(purgeAll);
+        buttons.add(export);
         buttons.add(status, "growx, wrap");
-        progressBar.setStringPainted(true);
-        progressBar.setVisible(false);
-        progressText.setVisible(false);
-        cancel.setToolTipText(Labels.getLabel("gui.admin.cancel.tooltip"));
-        cancel.setVisible(false);
-        cancel.addActionListener(e -> {
-            cancelled.set(true);
-            cancel.setEnabled(false);
-            status.setText(Labels.getLabel("gui.admin.cancelling"));
-        });
-        buttons.add(progressBar, "span 3, growx, h 22!");
-        buttons.add(progressText, "growx, split 2");
-        buttons.add(cancel, "gapleft 12");
+        buttons.add(progress, "span, growx");
 
         // a short list with its own scroll bar: the tab has room for other sections (backup) below
         table.setVisibleRowCount(VISIBLE_ROWS);
@@ -156,6 +147,7 @@ public class AdminPanel extends JPanel {
         refresh.setEnabled(!busy);
         purgeOld.setEnabled(!busy && info != null && info.getFirst() > 0);
         purgeAll.setEnabled(!busy && info != null && !HistoryStore.isOpen(info.getName(), storeManager));
+        export.setEnabled(!busy && info != null && info.getFirst() > 0);
     }
 
     private void purgeOld() {
@@ -175,9 +167,37 @@ public class AdminPanel extends JPanel {
         }
         if (!confirm(String.format(Labels.getLabel("gui.admin.purge.old.confirm"), info.getName(), days,
                 date(cutoff), formatSize(estimate(info, cutoff))))) return;
-        run(info, Labels.getLabel("gui.admin.purging"), progress -> {
-            long n = HistoryStore.purgeOlder(info.getName(), cutoff, storeManager, cancelled::get, progress);
-            return n < 0 ? cancelledText(progress) : String.format(Labels.getLabel("gui.admin.purge.done"), n, info.getName());
+        purge(info, cutoff);
+    }
+
+    private void purge(HistoryStore.Info info, long cutoff) {
+        progress.begin(HistoryStore.Step.DELETE, 0.6, HistoryStore.Step.COMPACT, 0.4);
+        run(info, Labels.getLabel("gui.admin.purging"), () -> {
+            long n = HistoryStore.purgeOlder(info.getName(), cutoff, storeManager, progress::isCancelled, progress);
+            return n < 0 ? cancelledText() : String.format(Labels.getLabel("gui.admin.purge.done"), n, info.getName());
+        });
+    }
+
+    /** Period (all of it by default) and file of the backup of the selected connection */
+    private void export() {
+        HistoryStore.Info info = selected();
+        if (info == null || info.getFirst() <= 0) return;
+        long[] period = ExportDialog.ask(this, info.getName(), info.getFirst(), info.getLast(), info.getBytes());
+        if (period == null) return;
+        javax.swing.JFileChooser chooser = new javax.swing.JFileChooser();
+        chooser.setDialogTitle(Labels.getLabel("gui.admin.export"));
+        chooser.setSelectedFile(new java.io.File(core.admin.HistoryBackup.defaultDir(),
+                core.admin.HistoryBackup.fileName(info.getName(), period[0], period[1])));
+        if (chooser.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) return;
+        java.io.File zip = chooser.getSelectedFile().getName().toLowerCase().endsWith(".zip") ? chooser.getSelectedFile()
+                : new java.io.File(chooser.getSelectedFile().getPath() + ".zip");
+        if (zip.exists() && !confirm(String.format(Labels.getLabel("gui.admin.export.replace"), zip.getName()))) return;
+        progress.begin(HistoryStore.Step.COPY, 0.85, HistoryStore.Step.ZIP, 0.15);
+        run(info, Labels.getLabel("gui.admin.exporting"), () -> {
+            long n = core.admin.HistoryBackup.export(info.getName(), period[0], period[1], zip, storeManager,
+                    configurationManager, progress::isCancelled, progress);
+            return n < 0 ? Labels.getLabel("gui.admin.export.cancelled")
+                    : String.format(Labels.getLabel("gui.admin.export.done"), number(n), zip.getAbsolutePath(), formatSize(zip.length()));
         });
     }
 
@@ -186,14 +206,15 @@ public class AdminPanel extends JPanel {
         if (info == null || HistoryStore.isOpen(info.getName(), storeManager)) return;
         if (!confirm(String.format(Labels.getLabel("gui.admin.purge.all.confirm"), info.getName(), formatSize(info.getBytes()))))
             return;
-        run(info, Labels.getLabel("gui.admin.purging"), progress -> {
+        progress.begin();
+        run(info, Labels.getLabel("gui.admin.purging"), () -> {
             HistoryStore.deleteAll(info.getName(), storeManager);
             return String.format(Labels.getLabel("gui.admin.purge.all.done"), info.getName());
         });
     }
 
     interface Task {
-        String run(HistoryStore.Progress progress) throws Exception;
+        String run() throws Exception;
     }
 
     /** One purge at a time (also with the automatic one), in the background, then the list is read again */
@@ -204,113 +225,37 @@ public class AdminPanel extends JPanel {
         }
         status.setText(message + " " + info.getName() + "...");
         updateButtons();
-        Tracker tracker = new Tracker();
-        cancelled.set(false);
-        cancel.setEnabled(true);
-        cancel.setVisible(true);
-        progressBar.setValue(0);
-        progressBar.setIndeterminate(true);
-        progressBar.setString("");
-        progressText.setText(" ");
-        progressBar.setVisible(true);
-        progressText.setVisible(true);
         Thread t = new Thread(() -> {
             String result;
             try {
-                result = task.run(tracker);
+                result = task.run();
             } catch (Exception e) {
                 log.error("Admin " + info.getName(), e);
                 result = Labels.getLabel("gui.admin.error") + " " + e.getMessage();
             } finally {
                 AutoPurge.end();
             }
-            String text = result + " (" + Labels.getLabel("gui.admin.progress.elapsed") + " " + clock(tracker.elapsed()) + ")";
+            String text = result + " (" + Labels.getLabel("gui.admin.progress.elapsed") + " "
+                    + TaskProgress.clock(progress.elapsed()) + ")";
             SwingUtilities.invokeLater(() -> {
-                tracker.finished = true;
-                cancel.setVisible(false);
-                progressBar.setVisible(false);
-                progressText.setVisible(false);
+                progress.end();
                 load();
                 status.setText(text);
             });
-        }, "admin-purge");
+        }, "admin-task");
         t.setDaemon(true);
         t.start();
     }
 
-    /**
-     * Progress of a purge: deleting is 60% of the bar, giving the space back 40%; remaining time from the speed so far
-     */
-    private final class Tracker implements HistoryStore.Progress {
-        private final long start = System.currentTimeMillis();
-        private volatile boolean scheduled;
-        private volatile boolean finished;
-        private volatile HistoryStore.Step step = HistoryStore.Step.COUNT;
-        private volatile long done;
-        private volatile long total = -1;
-
-        long elapsed() {
-            return System.currentTimeMillis() - start;
-        }
-
-        @Override
-        public void update(HistoryStore.Step step, long done, long total) {
-            this.step = step;
-            this.done = done;
-            this.total = total;
-            // at most a few repaints per second, whatever the number of updates
-            if (!scheduled) {
-                scheduled = true;
-                javax.swing.Timer timer = new javax.swing.Timer(250, e -> {
-                    scheduled = false;
-                    if (!finished) show();
-                });
-                timer.setRepeats(false);
-                timer.start();
-            }
-        }
-
-        private void show() {
-            long elapsed = elapsed();
-            String time = Labels.getLabel("gui.admin.progress.elapsed") + " " + clock(elapsed);
-            if (step == HistoryStore.Step.COUNT || total <= 0) {
-                progressBar.setIndeterminate(true);
-                progressBar.setString("");
-                progressText.setText(String.format(Labels.getLabel("gui.admin.progress.count"), number(done)) + " · " + time);
-                return;
-            }
-            double part = Math.min(1, (double) done / total);
-            double overall = step == HistoryStore.Step.DELETE ? 0.6 * part : 0.6 + 0.4 * part;
-            progressBar.setIndeterminate(false);
-            progressBar.setValue((int) Math.round(overall * 1000));
-            progressBar.setString(Math.round(overall * 100) + "%");
-            String what = step == HistoryStore.Step.DELETE
-                    ? String.format(Labels.getLabel("gui.admin.progress.delete"), number(done), number(total), number(total - done))
-                    : String.format(Labels.getLabel("gui.admin.progress.compact"), formatSize(done), formatSize(total),
-                    formatSize(total - done));
-            String remaining = overall < 0.02 ? Labels.getLabel("gui.admin.progress.estimating")
-                    : "~" + clock(Math.round(elapsed * (1 - overall) / overall));
-            progressText.setText(what + " · " + time + " · " + Labels.getLabel("gui.admin.progress.remaining") + " " + remaining);
-        }
-    }
-
     /** Cancelled: what was deleted until then stays deleted, the rest is kept */
-    private static String cancelledText(HistoryStore.Progress progress) {
-        Tracker t = (Tracker) progress;
-        return t.step == HistoryStore.Step.COMPACT ? Labels.getLabel("gui.admin.cancelled.compact")
-                : t.step == HistoryStore.Step.COUNT ? Labels.getLabel("gui.admin.cancelled.nothing")
-                : String.format(Labels.getLabel("gui.admin.cancelled.delete"), number(t.done), number(t.total));
-    }
-
-    /** 05:12 or 1:05:12 */
-    static String clock(long ms) {
-        long s = ms / 1000;
-        return s >= 3600 ? String.format("%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
-                : String.format("%02d:%02d", s / 60, s % 60);
+    private String cancelledText() {
+        return progress.getStep() == HistoryStore.Step.COMPACT ? Labels.getLabel("gui.admin.cancelled.compact")
+                : progress.getStep() == HistoryStore.Step.COUNT ? Labels.getLabel("gui.admin.cancelled.nothing")
+                : String.format(Labels.getLabel("gui.admin.cancelled.delete"), number(progress.getDone()), number(progress.getTotal()));
     }
 
     static String number(long n) {
-        return new DecimalFormat("#,##0", PT_BR).format(n);
+        return TaskProgress.number(n);
     }
 
     /** "Manter (dias)" edited: saved; offered to apply now when it deletes something */
@@ -329,10 +274,7 @@ public class AdminPanel extends JPanel {
             if (choice != 0 && choice != 1) return;
             HistoryStore.setKeepDays(info.getName(), days);
             if (choice == 0) {
-                run(info, Labels.getLabel("gui.admin.purging"), progress -> {
-                    long n = HistoryStore.purgeOlder(info.getName(), cutoff, storeManager, cancelled::get, progress);
-                    return n < 0 ? cancelledText(progress) : String.format(Labels.getLabel("gui.admin.purge.done"), n, info.getName());
-                });
+                purge(info, cutoff);
             }
         } else {
             HistoryStore.setKeepDays(info.getName(), days);
