@@ -740,8 +740,8 @@ public class SnapshotPanel extends JPanel {
     private void renderDataGuard(SnapshotService.Result standby, SnapshotService.Result destinations) {
         boolean hasStandbyStats = standby.isOk() && !standby.rows.isEmpty();
         boolean hasDestinations = destinations.isOk() && !destinations.rows.isEmpty();
-        boolean permissionError = (!standby.isOk() && standby.error.startsWith("sem permiss"))
-                || (!destinations.isOk() && destinations.error.startsWith("sem permiss"));
+        boolean permissionError = (!standby.isOk() && standby.isNoPermission())
+                || (!destinations.isOk() && destinations.isNoPermission());
 
         dgSection.setVisible(hasStandbyStats || hasDestinations || permissionError);
         dgModel.setRowCount(0);

@@ -4,6 +4,7 @@ import com.sleepycat.persist.EntityCursor;
 import com.sleepycat.persist.EntityStore;
 import com.sleepycat.persist.PrimaryIndex;
 import com.sleepycat.persist.SecondaryIndex;
+import config.Labels;
 import config.profile.ConfigProfile;
 import config.profile.ConnProfile;
 import config.profile.SqlColProfile;
@@ -98,7 +99,7 @@ public final class HistoryBackup {
                               HistoryStore.Progress progress) throws Exception {
         ConfigProfile config = configurationManager.getConnProfileList().stream()
                 .filter(c -> c.getConfigName().equalsIgnoreCase(name)).findFirst()
-                .orElseThrow(() -> new IllegalStateException("conexão sem configuração: " + name));
+                .orElseThrow(() -> new IllegalStateException(String.format(Labels.getLabel("gui.backup.noconfig"), name)));
         Path temp = Files.createTempDirectory("ashv-export");
         try {
             long[] counts;
@@ -114,15 +115,15 @@ public final class HistoryBackup {
             }
             Map<String, String> manifest = new java.util.LinkedHashMap<>();
             SimpleDateFormat f = new SimpleDateFormat(FORMAT);
-            manifest.put("conexao.origem", name);
-            manifest.put("perfil", config.getConnProfile().getProfileName());
+            manifest.put("source.connection", name);
+            manifest.put("profile", config.getConnProfile().getProfileName());
             // the samples really exported (the period asked may start before the history)
-            manifest.put("periodo.inicio", f.format(new Date(counts[2] > 0 ? counts[2] : from)));
-            manifest.put("periodo.fim", f.format(new Date(counts[3] > 0 ? counts[3] : to)));
-            manifest.put("amostras", String.valueOf(counts[0]));
-            manifest.put("textos.sql", String.valueOf(counts[1]));
-            manifest.put("exportado.em", f.format(new Date()));
-            manifest.put("exportado.por", "MP-ASH-Viewer");
+            manifest.put("period.start", f.format(new Date(counts[2] > 0 ? counts[2] : from)));
+            manifest.put("period.end", f.format(new Date(counts[3] > 0 ? counts[3] : to)));
+            manifest.put("samples", String.valueOf(counts[0]));
+            manifest.put("sql.texts", String.valueOf(counts[1]));
+            manifest.put("exported.at", f.format(new Date()));
+            manifest.put("exported.by", "MP-ASH-Viewer");
             if (!zip(temp.toFile(), zip, manifest, sanitized(config), stop, progress)) {
                 Files.deleteIfExists(zip.toPath());
                 return -1;
@@ -273,7 +274,7 @@ public final class HistoryBackup {
             out.putNextEntry(new ZipEntry(MANIFEST));
             // plain "key=value" lines, readable in any editor (values have no line breaks)
             Writer m = new OutputStreamWriter(out, StandardCharsets.UTF_8);
-            m.write("# MP-ASH-Viewer: backup do histórico local\n");
+            m.write("# MP-ASH-Viewer: local history backup\n");
             for (Map.Entry<String, String> e : manifest.entrySet()) {
                 m.write(e.getKey() + "=" + e.getValue().replace("\\", "\\\\") + "\n");
             }
@@ -332,25 +333,25 @@ public final class HistoryBackup {
             ZipEntry m = z.getEntry(MANIFEST);
             ZipEntry c = z.getEntry(CONFIG);
             if (m == null || c == null) {
-                throw new IllegalStateException("não é um backup do MP-ASH-Viewer (faltam " + MANIFEST + " / " + CONFIG + ")");
+                throw new IllegalStateException(String.format(Labels.getLabel("gui.backup.notbackup"), MANIFEST, CONFIG));
             }
             Properties p = new Properties();
             try (InputStream in = z.getInputStream(m)) {
                 p.load(new InputStreamReader(in, StandardCharsets.UTF_8));
             }
             Manifest out = new Manifest();
-            out.origin = p.getProperty("conexao.origem", "");
-            out.profile = p.getProperty("perfil", "");
+            out.origin = prop(p, "source.connection", "conexao.origem", "");
+            out.profile = prop(p, "profile", "perfil", "");
             SimpleDateFormat f = new SimpleDateFormat(FORMAT);
             try {
-                out.from = f.parse(p.getProperty("periodo.inicio")).getTime();
-                out.to = f.parse(p.getProperty("periodo.fim")).getTime();
+                out.from = f.parse(prop(p, "period.start", "periodo.inicio", null)).getTime();
+                out.to = f.parse(prop(p, "period.end", "periodo.fim", null)).getTime();
             } catch (Exception e) {
-                throw new IllegalStateException("período inválido em " + MANIFEST);
+                throw new IllegalStateException(String.format(Labels.getLabel("gui.backup.badperiod"), MANIFEST));
             }
-            out.samples = Long.parseLong(p.getProperty("amostras", "0"));
-            out.sqlTexts = Long.parseLong(p.getProperty("textos.sql", "0"));
-            out.exportedAt = p.getProperty("exportado.em", "");
+            out.samples = Long.parseLong(prop(p, "samples", "amostras", "0"));
+            out.sqlTexts = Long.parseLong(prop(p, "sql.texts", "textos.sql", "0"));
+            out.exportedAt = prop(p, "exported.at", "exportado.em", "");
             try (InputStream in = z.getInputStream(c)) {
                 out.config = yaml().loadAs(new InputStreamReader(in, StandardCharsets.UTF_8), ConfigProfile.class);
             }
@@ -358,32 +359,36 @@ public final class HistoryBackup {
         }
     }
 
+    /** Key of backup.properties; backups of the first version used Portuguese keys */
+    private static String prop(Properties p, String key, String oldKey, String def) {
+        return p.getProperty(key, p.getProperty(oldKey, def));
+    }
+
     /** Result of an import check: null when it can run, otherwise why not */
     public static String check(Manifest manifest, String target, ConfigurationManager configurationManager,
                                StoreManager storeManager) {
         if (storeManager != null && HistoryStore.isOpen(target, storeManager)) {
-            return "a conexão \"" + target + "\" está aberta neste app";
+            return String.format(Labels.getLabel("gui.backup.open"), target);
         }
         long[] period = samplesPeriod(target);
         if (period == null) {
             return null; // empty: any connection
         }
         if (!target.equalsIgnoreCase(manifest.origin)) {
-            return "\"" + target + "\" já tem histórico: só dá para importar nela um backup da própria conexão (o backup é de \""
-                    + manifest.origin + "\")";
+            return String.format(Labels.getLabel("gui.backup.other"), target, manifest.origin);
         }
         ConfigProfile config = config(configurationManager, target);
         if (config != null && !manifest.profile.equalsIgnoreCase(config.getConnProfile().getProfileName())) {
-            return "perfil diferente: backup " + manifest.profile + ", conexão " + config.getConnProfile().getProfileName();
+            return String.format(Labels.getLabel("gui.backup.profile"), manifest.profile, config.getConnProfile().getProfileName());
         }
         if (config != null && config.getSqlColProfileList() != null && !compatible(config.getSqlColProfileList(),
                 manifest.config.getSqlColProfileList())) {
-            return "as colunas coletadas do backup e da conexão são diferentes";
+            return Labels.getLabel("gui.backup.columns");
         }
         if (overlaps(target, manifest.from, manifest.to)) {
             SimpleDateFormat f = new SimpleDateFormat("dd/MM/yyyy HH:mm");
-            return "\"" + target + "\" já tem amostras entre " + f.format(new Date(manifest.from)) + " e "
-                    + f.format(new Date(manifest.to)) + ": a importação misturaria os dados";
+            return String.format(Labels.getLabel("gui.backup.overlap"), target, f.format(new Date(manifest.from)),
+                    f.format(new Date(manifest.to)));
         }
         return null;
     }
@@ -434,7 +439,7 @@ public final class HistoryBackup {
             config = manifest.config;
             config.setConfigName(target);
             config.getConnProfile().setConnName(target);
-            config.setGroupName("Importados");
+            config.setGroupName(Labels.getLabel("gui.import.group"));
             config.setRunning(false);
         } else {
             config = existing;

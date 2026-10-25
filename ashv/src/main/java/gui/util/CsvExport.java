@@ -14,7 +14,6 @@ import java.text.DecimalFormatSymbols;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 import java.util.prefs.Preferences;
 import javax.swing.JFileChooser;
 import javax.swing.JOptionPane;
@@ -26,7 +25,9 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 public final class CsvExport {
-    private static final String SEPARATOR = ";";
+    // as Excel: ";" where the decimal separator of the system is a comma, "," otherwise
+    private static final DecimalFormatSymbols SYSTEM_SYMBOLS = DecimalFormatSymbols.getInstance(Languages.systemLocale());
+    private static final String SEPARATOR = SYSTEM_SYMBOLS.getDecimalSeparator() == ',' ? ";" : ",";
     private static final String LAST_DIR = "export.lastDir";
     // own node: the "ASH-Viewer" node keeps the connection secrets
     private static final String PREFERENCES_NODE = "MP-ASH-Viewer";
@@ -77,7 +78,7 @@ public final class CsvExport {
     }
 
     public static void write(File file, List<String> header, List<Object[]> rows) throws IOException {
-        DecimalFormat decimal = new DecimalFormat("0.##########", DecimalFormatSymbols.getInstance(new Locale("pt", "BR")));
+        DecimalFormat decimal = new DecimalFormat("0.##########", SYSTEM_SYMBOLS);
         try (Writer out = new OutputStreamWriter(Files.newOutputStream(file.toPath()), StandardCharsets.UTF_8)) {
             out.write('﻿'); // BOM: Excel reads the file as UTF-8
             writeLine(out, header.toArray(), decimal);

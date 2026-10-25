@@ -67,7 +67,7 @@ public class ObjectNames {
         for (int from = 0; from < ids.size(); from += IDS_PER_QUERY) {
             List<String> chunk = ids.subList(from, Math.min(ids.size(), from + IDS_PER_QUERY));
             SnapshotService.Result result = query(chunk);
-            if (!result.isOk() && result.error.startsWith("sem permissão") && view.equals("dba_objects")) {
+            if (!result.isOk() && result.isNoPermission() && view.equals("dba_objects")) {
                 view = "all_objects"; // objects visible to the user
                 result = query(chunk);
             }

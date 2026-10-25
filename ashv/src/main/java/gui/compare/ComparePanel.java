@@ -852,14 +852,15 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         return to > from ? new long[]{from, to} : null;
     }
 
-    private static final DecimalFormatSymbols PT_BR = DecimalFormatSymbols.getInstance(new Locale("pt", "BR"));
+    // numbers in the language of the app (Locale.setDefault by gui.util.Languages)
+    private static final DecimalFormatSymbols SYMBOLS = DecimalFormatSymbols.getInstance();
 
     static String number(double value) {
-        return new DecimalFormat("0.00", PT_BR).format(value);
+        return new DecimalFormat("0.00", SYMBOLS).format(value);
     }
 
     static String signed(double value) {
-        return new DecimalFormat("+0.00;-0.00", PT_BR).format(value);
+        return new DecimalFormat("+0.00;-0.00", SYMBOLS).format(value);
     }
 
     /** Average: 2 decimals; total: time (45s, 18min 20s, 2h 05min) */
@@ -877,7 +878,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     static String time(double seconds) {
         long s = Math.round(seconds);
         if (seconds > 0 && seconds < 10) {
-            return new DecimalFormat("0.#", PT_BR).format(seconds) + "s";
+            return new DecimalFormat("0.#", SYMBOLS).format(seconds) + "s";
         }
         if (s < 60) {
             return s + "s";
@@ -889,7 +890,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     }
 
     static String percent(double value) {
-        return new DecimalFormat("+0;-0", PT_BR).format(value) + "%";
+        return new DecimalFormat("+0;-0", SYMBOLS).format(value) + "%";
     }
 
     /** Values in the measure of the model (2 decimals or time), the difference with sign, the change in % */
@@ -910,11 +911,11 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             } else if (modelCol == ItemsModel.COL_DELTA) {
                 setText(signed(v, measure));
             } else if (modelCol == ItemsModel.COL_EXEC_A || modelCol == ItemsModel.COL_EXEC_B) {
-                setText(v < 0 ? "—" : new DecimalFormat("#,##0", PT_BR).format(v));
+                setText(v < 0 ? "—" : new DecimalFormat("#,##0", SYMBOLS).format(v));
             } else if (modelCol == ItemsModel.COL_TPE_A || modelCol == ItemsModel.COL_TPE_B) {
                 setText(Double.isNaN(v) ? "—" : time(v));
             } else if (modelCol == ItemsModel.COL_SHARE || modelCol == ItemsModel.COL_SHARE_A) {
-                setText(new DecimalFormat("0", PT_BR).format(v) + "%");
+                setText(new DecimalFormat("0", SYMBOLS).format(v) + "%");
             } else {
                 setText(v == 0 ? "—" : format(v, measure));
             }

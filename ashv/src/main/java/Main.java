@@ -1,6 +1,7 @@
 import config.dagger.DaggerMainComponent;
 import config.dagger.MainComponent;
 import gui.MainWindow;
+import gui.util.Languages;
 import gui.util.Themes;
 import lombok.extern.slf4j.Slf4j;
 
@@ -11,6 +12,7 @@ public class Main {
 
         log.info("Start application");
 
+        Languages.apply(Languages.startup());
         Themes.apply(Themes.startup());
 
         MainComponent mainComponent = DaggerMainComponent.create();

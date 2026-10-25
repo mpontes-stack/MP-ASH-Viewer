@@ -677,9 +677,28 @@ public class ConnectToDbArea extends JDialog {
             }
         });
 
-        JPanel panel = new JPanel(new MigLayout("ins 0", "[][]"));
+        // language: texts are read when the windows are built, so it applies at the next start
+        JComboBox<String> languageBox = new JComboBox<>();
+        for (String language : gui.util.Languages.ALL) {
+            languageBox.addItem(Labels.getLabel("language." + language));
+        }
+        languageBox.setSelectedIndex(Arrays.asList(gui.util.Languages.ALL).indexOf(gui.util.Languages.current()));
+        languageBox.setToolTipText(Labels.getLabel("preferences.language.tooltip"));
+        languageBox.addActionListener(e -> {
+            String language = gui.util.Languages.ALL[languageBox.getSelectedIndex()];
+            if (language.equals(gui.util.Languages.current())) {
+                return;
+            }
+            gui.util.Languages.save(language);
+            JOptionPane.showMessageDialog(this, Labels.getLabel("preferences.language.next"),
+                    Labels.getLabel("preferences.language"), JOptionPane.INFORMATION_MESSAGE);
+        });
+
+        JPanel panel = new JPanel(new MigLayout("ins 0", "[][]16[][]"));
         panel.add(new JLabel(Labels.getLabel("gui.theme.label")));
         panel.add(themeBox);
+        panel.add(new JLabel(Labels.getLabel("preferences.language") + ":"));
+        panel.add(languageBox);
         return panel;
     }
 

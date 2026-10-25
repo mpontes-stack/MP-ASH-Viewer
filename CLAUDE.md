@@ -37,8 +37,10 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
   `AshFilter.Matcher` (not thread safe: one per task). `FilteredAshLoader` rebuilds charts from raw samples.
 - `gui/MonitorDbPanel`: builds the tabs. `gui/compare` + `core/compare/PeriodComparison`: "Comparar" tab.
   `gui/snapshot/SnapshotPanel`: "Agora" tabs. `gui/admin` + `core/admin`: "Admin" tab (disk usage, purge, keep days). `gui/lock`: lock tree. `gui/util/Themes`: light / dark / classic.
-- UI texts: `ashv/src/main/resources/messages.properties` (UTF-8, mostly Portuguese) through `config.Labels`;
-  some old screens still have hardcoded English strings.
+- UI texts through `config.Labels`: `messages.properties` in **English** (the default, also used for any missing
+  key) and `messages_pt.properties` in Portuguese (UTF-8). `gui/util/Languages` applies the language chosen in the
+  connection dialog (or the system one) at startup: texts, `Locale.setDefault` (number and date formats, date
+  pickers). Technical terms stay in English in both (Top Activity, History, ASH Report, Raw data, wait class...).
 
 ## Rules that are easy to break
 
@@ -53,6 +55,10 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
 - **Preferences:** the node `ASH-Viewer` holds connection secrets; app settings of this fork go in `MP-ASH-Viewer`.
 - **Colors in SwingX tables:** `JXTable` resets renderer colors; use `ColorHighlighter` (see `ComparePanel`).
   Pick light and dark variants (`Themes.isDark()`); charts keep the colors they were created with.
+- **Every new text goes to both message files** (English and Portuguese, same `%s` order); no user text in the
+  code. Check with `python3 tools/i18n/check_messages.py`. Never decide by comparing a translated message (use a flag).
+- **Numbers and dates** use the default locale (the app language): no hardcoded `new Locale("pt", "BR")`. CSV files
+  follow the system locale (`Languages.systemLocale()`), as Excel does.
 - **Red means "negative" to the owner:** increases are blue, decreases green (Comparar).
 - Do not use the owner's real data (`configuration/`, `database/`, `filters.yaml` of their install) in commits,
   and work on copies of it in tests.

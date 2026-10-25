@@ -39,7 +39,8 @@ import store.StoreManager;
 public class AdminPanel extends JPanel {
     private static final long DAY = 24 * 3600_000L;
     private static final int VISIBLE_ROWS = 10;
-    private static final DecimalFormatSymbols PT_BR = DecimalFormatSymbols.getInstance(new Locale("pt", "BR"));
+    // numbers in the language of the app (Locale.setDefault by gui.util.Languages)
+    private static final DecimalFormatSymbols SYMBOLS = DecimalFormatSymbols.getInstance();
 
     private final StoreManager storeManager;
     private final HistoryModel model = new HistoryModel();
@@ -309,9 +310,9 @@ public class AdminPanel extends JPanel {
     }
 
     static String formatSize(long bytes) {
-        if (bytes >= 1L << 30) return new DecimalFormat("0.0", PT_BR).format(bytes / (double) (1L << 30)) + " GB";
-        if (bytes >= 1L << 20) return new DecimalFormat("0", PT_BR).format(bytes / (double) (1L << 20)) + " MB";
-        return new DecimalFormat("0", PT_BR).format(bytes / 1024.0) + " KB";
+        if (bytes >= 1L << 30) return new DecimalFormat("0.0", SYMBOLS).format(bytes / (double) (1L << 30)) + " GB";
+        if (bytes >= 1L << 20) return new DecimalFormat("0", SYMBOLS).format(bytes / (double) (1L << 20)) + " MB";
+        return new DecimalFormat("0", SYMBOLS).format(bytes / 1024.0) + " KB";
     }
 
     static String date(long ms) {

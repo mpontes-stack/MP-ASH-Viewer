@@ -1,5 +1,6 @@
 package core.snapshot;
 
+import config.Labels;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -58,6 +59,8 @@ public class SnapshotService {
         public final String error;
         public final long elapsedMs;
         boolean isLostConnection;
+        /** No SELECT on a view of the query */
+        boolean noPermission;
 
         Result(List<String> columns, List<Object[]> rows, String error, long elapsedMs) {
             this.columns = columns;
@@ -68,6 +71,10 @@ public class SnapshotService {
 
         public boolean isOk() {
             return error == null;
+        }
+
+        public boolean isNoPermission() {
+            return noPermission;
         }
 
         static Result error(String error) {
@@ -104,8 +111,8 @@ public class SnapshotService {
             }
         } catch (SQLException e) {
             log.error("Snapshot connection: " + e.getMessage());
-            String message = e.getMessage() != null && (e.getMessage().startsWith("sem resposta") || e.getMessage().startsWith("aguardando"))
-                    ? e.getMessage() : "sem conexão: " + e.getMessage();
+            String message = e instanceof NoAnswerException ? e.getMessage()
+                    : String.format(Labels.getLabel("gui.snapshot.err.noconnection"), e.getMessage());
             queries.keySet().forEach(name -> out.put(name, Result.error(message)));
         }
 
@@ -119,7 +126,7 @@ public class SnapshotService {
     private synchronized Connection getConnectionWithTimeout() throws SQLException {
         if (pendingConnect != null && !pendingConnect.isDone()
                 && System.currentTimeMillis() - pendingSince < RETRY_PENDING_AFTER_MS) {
-            throw new SQLException("aguardando a tentativa anterior de conexão (rede ou conexão caiu?)");
+            throw new NoAnswerException(Labels.getLabel("gui.snapshot.err.waiting"));
         }
         java.util.concurrent.atomic.AtomicBoolean abandoned = new java.util.concurrent.atomic.AtomicBoolean(false);
         java.util.concurrent.Future<Connection> future = CONNECT_EXECUTOR.submit(() -> {
@@ -143,7 +150,7 @@ public class SnapshotService {
                     // failed anyway
                 }
             }
-            throw new SQLException("sem resposta do banco em " + RemoteDBManager.TIMEOUT_SECONDS + " s (rede ou conexão caiu?)");
+            throw new NoAnswerException(String.format(Labels.getLabel("gui.snapshot.err.noanswer"), RemoteDBManager.TIMEOUT_SECONDS));
         } catch (java.util.concurrent.ExecutionException e) {
             throw e.getCause() instanceof SQLException ? (SQLException) e.getCause() : new SQLException(e.getCause());
         } catch (InterruptedException e) {
@@ -195,11 +202,10 @@ public class SnapshotService {
                 return new Result(columns, rows, null, System.currentTimeMillis() - start);
             }
         } catch (SQLTimeoutException e) {
-            return Result.error("tempo limite de " + QUERY_TIMEOUT_SEC + " s excedido");
+            return Result.error(String.format(Labels.getLabel("gui.snapshot.err.timeout"), QUERY_TIMEOUT_SEC));
         } catch (java.sql.SQLRecoverableException e) { // socket read timeout / connection lost
             log.info("Snapshot connection lost: " + e.getMessage());
-            Result result = Result.error("sem resposta do banco em " + RemoteDBManager.TIMEOUT_SECONDS
-                    + " s (rede ou conexão caiu?)");
+            Result result = Result.error(String.format(Labels.getLabel("gui.snapshot.err.noanswer"), RemoteDBManager.TIMEOUT_SECONDS));
             result.isLostConnection = true;
             return result;
         } catch (SQLException e) {
@@ -207,12 +213,22 @@ public class SnapshotService {
             switch (e.getErrorCode()) {
                 case 942:   // table or view does not exist
                 case 1031:  // insufficient privileges
-                    return Result.error("sem permissão: precisa de SELECT em " + (views == null ? "views do catálogo" : views));
+                    Result denied = Result.error(String.format(Labels.getLabel("gui.snapshot.err.permission"),
+                            views == null ? Labels.getLabel("gui.snapshot.err.catalog") : views));
+                    denied.noPermission = true;
+                    return denied;
                 case 1013:  // user requested cancel (timeout)
-                    return Result.error("tempo limite de " + QUERY_TIMEOUT_SEC + " s excedido");
+                    return Result.error(String.format(Labels.getLabel("gui.snapshot.err.timeout"), QUERY_TIMEOUT_SEC));
                 default:
                     return Result.error(e.getMessage() == null ? e.toString() : e.getMessage().trim());
             }
+        }
+    }
+
+    /** The database did not answer (or a previous attempt is still pending): the message is shown as is */
+    private static final class NoAnswerException extends SQLException {
+        NoAnswerException(String message) {
+            super(message);
         }
     }
 }

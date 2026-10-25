@@ -20,7 +20,8 @@ import net.miginfocom.swing.MigLayout;
  * remaining time from the speed so far, and a Cancel button. Hidden while no task runs.
  */
 public class TaskProgress extends JPanel implements HistoryStore.Progress {
-    private static final DecimalFormatSymbols PT_BR = DecimalFormatSymbols.getInstance(new Locale("pt", "BR"));
+    // numbers in the language of the app (Locale.setDefault by gui.util.Languages)
+    private static final DecimalFormatSymbols SYMBOLS = DecimalFormatSymbols.getInstance();
 
     private final JProgressBar bar = new JProgressBar(0, 1000);
     private final JLabel text = new JLabel(" ");
@@ -155,6 +156,6 @@ public class TaskProgress extends JPanel implements HistoryStore.Progress {
     }
 
     public static String number(long n) {
-        return new DecimalFormat("#,##0", PT_BR).format(n);
+        return new DecimalFormat("#,##0", SYMBOLS).format(n);
     }
 }
