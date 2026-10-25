@@ -15,6 +15,8 @@ import gui.chart.ChartDatasetManager;
 import gui.chart.GroupByChart;
 import gui.chart.panel.NameChartDataset;
 import gui.compare.ComparePanel;
+import gui.admin.AdminPanel;
+import core.admin.AutoPurge;
 import gui.custom.TabIcon;
 import gui.filter.FilterBar;
 import gui.snapshot.SnapshotPanel;
@@ -168,11 +170,18 @@ public class MonitorDbPanel {
                 new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.SESSIONS));
         mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.resources"), new TabIcon(TabIcon.Type.RESOURCES),
                 new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.RESOURCES));
+        addAdmin();
     }
 
     public void addGuiHistory(){
         mainTabbedPane.addTab("History", new TabIcon(TabIcon.Type.HISTORY), controlMainDetailHistory);
         mainTabbedPane.addTab(Labels.getLabel("gui.compare.tab"), new TabIcon(TabIcon.Type.COMPARE), getComparePanel());
+    }
+
+    /** "Admin" tab (last) and the automatic purge of the open connection */
+    public void addAdmin() {
+        mainTabbedPane.addTab(Labels.getLabel("gui.admin.tab"), new TabIcon(TabIcon.Type.ADMIN), new AdminPanel(storeManager));
+        AutoPurge.start(storeManager, storeManager.getConfigurationManager().getCurrentConfiguration().getConfigName());
     }
 
     /** "Comparar" tab, period B starts as the History period (or the Top Activity chart) */

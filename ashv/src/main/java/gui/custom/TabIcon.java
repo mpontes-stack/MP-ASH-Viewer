@@ -18,7 +18,7 @@ import javax.swing.Icon;
  * Small icons of the main tabs, drawn (sharp at any scale) with light / dark theme colors
  */
 public class TabIcon implements Icon {
-    public enum Type {ACTIVITY, HISTORY, COMPARE, SESSIONS, RESOURCES}
+    public enum Type {ACTIVITY, HISTORY, COMPARE, SESSIONS, RESOURCES, ADMIN}
 
     private static final int SIZE = 16;
 
@@ -100,6 +100,21 @@ public class TabIcon implements Icon {
                     g2.fill(new Ellipse2D.Double(6.5, 8, 3, 3));
                     break;
                 }
+                case ADMIN: {
+                    // gear
+                    java.awt.geom.Area gear = new java.awt.geom.Area(new Ellipse2D.Double(3, 3, 10, 10));
+                    for (int i = 0; i < 8; i++) {
+                        java.awt.geom.AffineTransform r = java.awt.geom.AffineTransform.getRotateInstance(Math.PI / 4 * i, 8, 8);
+                        gear.add(new java.awt.geom.Area(r.createTransformedShape(new Rectangle2D.Double(6.8, 1, 2.4, 3))));
+                    }
+                    gear.subtract(new java.awt.geom.Area(new Ellipse2D.Double(5.8, 5.8, 4.4, 4.4)));
+                    g2.setColor(fill);
+                    g2.fill(gear);
+                    g2.setColor(color);
+                    g2.setStroke(new BasicStroke(1f));
+                    g2.draw(gear);
+                    break;
+                }
                 default:
             }
         } finally {
@@ -123,6 +138,8 @@ public class TabIcon implements Icon {
                 return dark ? new Color(240, 170, 60) : new Color(200, 120, 0);
             case SESSIONS:
                 return dark ? new Color(185, 140, 240) : new Color(120, 70, 190);
+            case ADMIN:
+                return dark ? new Color(175, 180, 190) : new Color(95, 100, 110);
             default:
                 return dark ? new Color(80, 200, 200) : new Color(0, 130, 140);
         }

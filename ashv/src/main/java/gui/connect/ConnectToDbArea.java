@@ -1103,6 +1103,7 @@ public class ConnectToDbArea extends JDialog {
             jButtonConnect.setText(Labels.getLabel("gui.connection.button.connect.running"));
 
             monitorDbPanel.addGuiHistory();
+            monitorDbPanel.addAdmin();
             monitoring = true;
 
         } catch (Exception ex) {
