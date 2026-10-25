@@ -24,6 +24,9 @@ import store.StoreManager;
 @Slf4j
 @Singleton
 public class ChartDatasetManager {
+    /** Legend of the Top Activity charts: smaller than the text of the screen (History uses 8) */
+    public static final int LEGEND_FONT_SIZE = 10;
+
     private BasicFrame jFrame;
     private ColorManager colorManager;
     private StoreManager storeManager;
@@ -59,6 +62,7 @@ public class ChartDatasetManager {
         StackChartPanel mainStackChartPanel = new StackChartPanel(Labels.getLabel("chart.main.name"), colorManager);
         mainStackChartPanel.setXyDatasetRDA(mainXyDatasetRDA);
         mainStackChartPanel.setXAxisLabel(" ");
+        mainStackChartPanel.setLegendFontSize(LEGEND_FONT_SIZE);
         mainStackChartPanel.initialize();
 
         MonitorGantt2 monitorGantt2 = new MonitorGantt2(jFrame, storeManager, getFromRemoteAndStore, colorManager);
@@ -84,6 +88,7 @@ public class ChartDatasetManager {
                 StackChartPanel stackChartPanel = new StackChartPanel(e, colorManager);
                 stackChartPanel.setXyDatasetRDA(xyDatasetRDA);
                 stackChartPanel.setXAxisLabel(" ");
+                stackChartPanel.setLegendFontSize(LEGEND_FONT_SIZE);
                 stackChartPanel.initialize();
                 stackChartPanel.getStackedChart().setChartTitle(Labels.getLabel("chart.main.ta"));
 

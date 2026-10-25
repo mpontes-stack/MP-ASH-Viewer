@@ -66,7 +66,7 @@ public class GroupByChart {
     public GroupByChart(StoreManager storeManager, ColorManager colorManager, AshFilter ashFilter,
                         FilteredAshLoader filteredAshLoader, Supplier<List<Double>> xValuesSupplier) {
         this(storeManager, colorManager, ashFilter, filteredAshLoader, xValuesSupplier,
-                ConstantManager.CURRENT_WINDOW / ConstantManager.MAX_POINT_PER_GRAPH, 12);
+                ConstantManager.CURRENT_WINDOW / ConstantManager.MAX_POINT_PER_GRAPH, ChartDatasetManager.LEGEND_FONT_SIZE);
     }
 
     /**
