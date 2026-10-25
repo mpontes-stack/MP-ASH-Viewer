@@ -31,11 +31,12 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
 - `core/processing/GetFromRemoteAndStore`: the collection loop (+ manual `reconnect()`).
 - `store/*`: Berkeley DB (`MainData` = one sample: a matrix of int ids; strings and big numbers live in
   dictionaries `ParameterString` / `ParameterDouble`; `ConvertManager` turns ids back into values). History
-  aggregates in `store/entity/olap` (15 s and 1 min). SQL texts cached in `ParamStringString` (`core/sqltext`).
+  aggregates in `store/entity/olap` (15 s and 1 min). SQL texts cached in `ParamStringString` (`core/sqltext`:
+  `SqlTexts` is read by every tooltip; `SqlTextCapture` saves the texts of the collected SQL_IDs every 10 min).
 - `core/filter/AshFilter` (global filter, AND between columns, OR inside one, `!COL` exclusions) and
   `AshFilter.Matcher` (not thread safe: one per task). `FilteredAshLoader` rebuilds charts from raw samples.
 - `gui/MonitorDbPanel`: builds the tabs. `gui/compare` + `core/compare/PeriodComparison`: "Comparar" tab.
-  `gui/snapshot/SnapshotPanel`: "Agora" tabs. `gui/lock`: lock tree. `gui/util/Themes`: light / dark / classic.
+  `gui/snapshot/SnapshotPanel`: "Agora" tabs. `gui/admin` + `core/admin`: "Admin" tab (disk usage, purge, keep days). `gui/lock`: lock tree. `gui/util/Themes`: light / dark / classic.
 - UI texts: `ashv/src/main/resources/messages.properties` (UTF-8, mostly Portuguese) through `config.Labels`;
   some old screens still have hardcoded English strings.
 

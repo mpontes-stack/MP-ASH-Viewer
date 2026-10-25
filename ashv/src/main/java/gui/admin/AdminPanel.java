@@ -47,6 +47,7 @@ public class AdminPanel extends JPanel {
     private final HistoryModel model = new HistoryModel();
     private final JXTable table = new JXTable(model);
     private final JLabel summary = new JLabel(" ");
+    private final JLabel sqlTexts = new JLabel(" ");
     private final JLabel status = new JLabel(" ");
     private final JButton refresh = new JButton(Labels.getLabel("gui.admin.refresh"));
     private final JButton purgeOld = new JButton(Labels.getLabel("gui.admin.purge.old"));
@@ -77,6 +78,7 @@ public class AdminPanel extends JPanel {
         top.add(title(Labels.getLabel("gui.admin.history")), "split 2, gapbottom 2");
         top.add(new JSeparator(), "growx, wrap");
         top.add(summary, "wrap");
+        top.add(sqlTexts, "wrap");
         JLabel help = new JLabel(Labels.getLabel("gui.admin.keep.help"));
         help.setEnabled(false);
         top.add(help, "wrap");
@@ -123,8 +125,10 @@ public class AdminPanel extends JPanel {
         List<HistoryStore.Info> infos = HistoryStore.list();
         model.set(infos);
         long total = infos.stream().mapToLong(HistoryStore.Info::getBytes).sum();
+        long texts = HistoryStore.sqlTextCount(storeManager);
         summary.setText(String.format(Labels.getLabel("gui.admin.summary"), infos.size(), formatSize(total),
                 HistoryStore.databaseDir().getAbsolutePath()));
+        sqlTexts.setText(texts >= 0 ? String.format(Labels.getLabel("gui.admin.sqltexts"), number(texts)) : " ");
         status.setText(Labels.getLabel("gui.admin.reading"));
         Thread t = new Thread(() -> {
             for (int i = 0; i < infos.size() && gen == generation; i++) {

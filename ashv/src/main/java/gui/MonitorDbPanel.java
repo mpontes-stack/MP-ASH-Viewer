@@ -23,6 +23,7 @@ import gui.snapshot.SnapshotPanel;
 import remote.RemoteDBManager;
 import gui.gantt.MonitorGantt2;
 import core.lock.ObjectNames;
+import core.sqltext.SqlTextCapture;
 import core.sqltext.SqlTexts;
 import gui.lock.LockTreePanel;
 import gui.table.RawDataTable;
@@ -171,6 +172,7 @@ public class MonitorDbPanel {
         mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.resources"), new TabIcon(TabIcon.Type.RESOURCES),
                 new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.RESOURCES));
         addAdmin();
+        SqlTextCapture.start();
     }
 
     public void addGuiHistory(){

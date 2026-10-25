@@ -103,6 +103,16 @@ public final class HistoryStore {
         }
     }
 
+    /** SQL texts kept in the history open in the app (tooltips, captured every 10 minutes), -1 when unknown */
+    public static long sqlTextCount(StoreManager storeManager) {
+        try {
+            return storeManager.getBerkleyDB().getStore()
+                    .getPrimaryIndex(String.class, store.entity.database.ParamStringString.class).count();
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
     /** The history open in the app (collecting or shown) */
     public static boolean isOpen(String name, StoreManager storeManager) {
         String dir = storeManager.getBerkleyDB().getDirectory();
