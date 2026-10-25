@@ -54,6 +54,7 @@ public class FilterBar extends JPanel {
     public FilterBar(AshFilter ashFilter, FilteredAshLoader filteredAshLoader, FilterPresets filterPresets,
                      StoreManager storeManager, Supplier<long[]> rangeSupplier) {
         super(new FlowLayout(FlowLayout.LEFT, 6, 3));
+        gui.util.Ui.highlight(this);
         this.ashFilter = ashFilter;
         this.filteredAshLoader = filteredAshLoader;
         this.filterPresets = filterPresets;

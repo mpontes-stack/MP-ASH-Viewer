@@ -164,7 +164,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
 
         // period A, its chart, period B, its chart
         JPanel top = new JPanel(new MigLayout("ins 6, gap 6 3, fill", "[right][][][][][][][grow]", "[][grow][][grow]"));
-        top.add(new JLabel(Labels.getLabel("gui.compare.period.a")));
+        top.add(gui.util.Ui.title(Labels.getLabel("gui.compare.period.a")));
         top.add(startA);
         top.add(new JLabel(Labels.getLabel("gui.compare.until")));
         top.add(endA);
@@ -179,7 +179,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         focusBar.add(showAll, "gapleft 12");
         focusBar.setVisible(false);
         top.add(chartA, "span, grow, wrap");
-        top.add(new JLabel(Labels.getLabel("gui.compare.period.b")));
+        top.add(gui.util.Ui.title(Labels.getLabel("gui.compare.period.b")));
         top.add(startB);
         top.add(new JLabel(Labels.getLabel("gui.compare.until")));
         top.add(endB);
@@ -196,7 +196,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         measureBox.addActionListener(e -> {
             if (last != null) show(last, lastProfile);
         });
-        results.add(new JLabel(Labels.getLabel("gui.compare.measure")));
+        results.add(gui.util.Ui.title(Labels.getLabel("gui.compare.measure")));
         results.add(measureBox, "wrap");
         results.add(summary, "span, growx, gapleft 4");
 
@@ -208,7 +208,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         export.setEnabled(false);
         export.addActionListener(e -> exportItems());
         JPanel itemsBar = new JPanel(new MigLayout("ins 4 6 2 6", "[][][]"));
-        itemsBar.add(new JLabel(Labels.getLabel("gui.compare.by")));
+        itemsBar.add(gui.util.Ui.title(Labels.getLabel("gui.compare.by")));
         itemsBar.add(dimensionBox);
         itemsBar.add(export, "gapleft 12");
         JLabel focusHint = new JLabel(Labels.getLabel("gui.compare.focus.hint"));
@@ -218,7 +218,14 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         itemsPanel.add(itemsBar, BorderLayout.NORTH);
         itemsPanel.add(itemsContent, BorderLayout.CENTER);
 
-        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, waitClassContent, itemsPanel);
+        // wait classes under a title, like the "Comparar por" table
+        JPanel waitClassBar = new JPanel(new MigLayout("ins 4 6 2 6, fillx", "[][grow]"));
+        waitClassBar.add(gui.util.Ui.title(Labels.getLabel("gui.compare.waitclasses")));
+        waitClassBar.add(new javax.swing.JSeparator(), "growx");
+        JPanel waitClassPanel = new JPanel(new BorderLayout());
+        waitClassPanel.add(waitClassBar, BorderLayout.NORTH);
+        waitClassPanel.add(waitClassContent, BorderLayout.CENTER);
+        JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, waitClassPanel, itemsPanel);
         split.setDividerLocation(170);
         split.setResizeWeight(0.2);
         split.setOneTouchExpandable(true);

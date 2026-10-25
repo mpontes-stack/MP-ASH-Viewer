@@ -129,23 +129,26 @@ public class MonitorDbPanel {
         topActivitySplitPane.setDividerLocation(300);
 
         mainGanttAndRaw = new JTabbedPane();
-        mainGanttAndRaw.add("Top sql & sessions", chartDatasetManager.getMainNameChartDataset().getMonitorGantt2());
-        mainGanttAndRaw.add("Raw data", chartDatasetManager.getMainNameChartDataset().getRawDataTable());
-        mainGanttAndRaw.add("ASH Report", chartDatasetManager.getMainNameChartDataset().getAshReport());
+        mainGanttAndRaw.addTab("Top sql & sessions", new TabIcon(TabIcon.Type.TOP_SQL), chartDatasetManager.getMainNameChartDataset().getMonitorGantt2());
+        mainGanttAndRaw.addTab("Raw data", new TabIcon(TabIcon.Type.RAW), chartDatasetManager.getMainNameChartDataset().getRawDataTable());
+        mainGanttAndRaw.addTab("ASH Report", new TabIcon(TabIcon.Type.REPORT), chartDatasetManager.getMainNameChartDataset().getAshReport());
         objectNames = new ObjectNames(remoteDBManager, connProfile.getProfileName());
         lockTreePanel = new LockTreePanel(storeManager, ashFilter, getFromRemoteAndStore::getMainChartRange,
                 objectNames, true);
         chartDatasetManager.getMainNameChartDataset().getStackChartPanel().addChartListenerReleaseMouse(lockTreePanel);
         chartDatasetManager.getMainNameChartDataset().getStackChartPanel().addChartListenerReleaseMouse(getComparePanel());
-        mainGanttAndRaw.add(Labels.getLabel("gui.lock.tab"), lockTreePanel);
+        mainGanttAndRaw.addTab(Labels.getLabel("gui.lock.tab"), new TabIcon(TabIcon.Type.LOCKS), lockTreePanel);
 
         FilterBar filterBar = newFilterBar(getFromRemoteAndStore::getMainChartRange);
+        // filter bar over the width (Reconectar in the corner), below it the title of the chart and "Agrupar por"
         JPanel topActivityNorthPanel = new JPanel(new BorderLayout());
-        topActivityNorthPanel.add(createGroupByPanel(), BorderLayout.WEST);
-        topActivityNorthPanel.add(filterBar, BorderLayout.CENTER);
+        JPanel topActivityFilterRow = new JPanel(new BorderLayout());
+        topActivityFilterRow.add(filterBar, BorderLayout.CENTER);
         JPanel reconnectPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 3));
         reconnectPanel.add(createReconnectButton());
-        topActivityNorthPanel.add(reconnectPanel, BorderLayout.EAST);
+        topActivityFilterRow.add(reconnectPanel, BorderLayout.EAST);
+        topActivityNorthPanel.add(topActivityFilterRow, BorderLayout.NORTH);
+        topActivityNorthPanel.add(titleRow("Top Activity", createGroupByPanel()), BorderLayout.CENTER);
 
         JPanel topActivityChartPanel = new JPanel(new BorderLayout());
         topActivityChartPanel.add(topActivityNorthPanel, BorderLayout.NORTH);
@@ -240,6 +243,15 @@ public class MonitorDbPanel {
     /**
      * "Agrupar por" combo with the collected columns; null is passed for wait class
      */
+    /** Blue title of a chart with its options ("Agrupar por") on the same row */
+    private static JPanel titleRow(String title, JComponent options) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        row.add(gui.util.Ui.title(title));
+        row.add(Box.createHorizontalStrut(12));
+        row.add(options);
+        return row;
+    }
+
     private JPanel newGroupByPanel(java.util.function.Consumer<String> onChange) {
         java.util.List<String> available = new java.util.ArrayList<>();
         java.util.List<config.profile.SqlColProfile> cols =
@@ -264,10 +276,9 @@ public class MonitorDbPanel {
             onChange.accept(selected == null || selected.equals(waitClassItem) ? null : selected);
         });
 
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         panel.add(new JLabel(Labels.getLabel("gui.groupby.label")));
         panel.add(groupByBox);
-        panel.add(new JSeparator(SwingConstants.VERTICAL));
         return panel;
     }
 
@@ -546,8 +557,8 @@ public class MonitorDbPanel {
         JPanel historyNorthPanel = new JPanel(new BorderLayout());
         historyNorthPanel.add(mainStartEndDateTimePicker/*buttonPanel*/, BorderLayout.NORTH);
         JPanel historyFilterPanel = new JPanel(new BorderLayout());
-        historyFilterPanel.add(newGroupByPanel(historyPanel::setGroupBy), BorderLayout.WEST);
-        historyFilterPanel.add(newFilterBar(this::getHistoryRange), BorderLayout.CENTER);
+        historyFilterPanel.add(newFilterBar(this::getHistoryRange), BorderLayout.NORTH);
+        historyFilterPanel.add(titleRow("History", newGroupByPanel(historyPanel::setGroupBy)), BorderLayout.CENTER);
         historyNorthPanel.add(historyFilterPanel, BorderLayout.SOUTH);
 
         controlMainDetailHistory.add(historyNorthPanel, BorderLayout.NORTH);

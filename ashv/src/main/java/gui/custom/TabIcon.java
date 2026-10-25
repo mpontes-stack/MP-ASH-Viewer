@@ -18,7 +18,7 @@ import javax.swing.Icon;
  * Small icons of the main tabs, drawn (sharp at any scale) with light / dark theme colors
  */
 public class TabIcon implements Icon {
-    public enum Type {ACTIVITY, HISTORY, COMPARE, SESSIONS, RESOURCES, ADMIN}
+    public enum Type {ACTIVITY, HISTORY, COMPARE, SESSIONS, RESOURCES, ADMIN, TOP_SQL, RAW, REPORT, LOCKS, DETAIL}
 
     private static final int SIZE = 16;
 
@@ -115,6 +115,64 @@ public class TabIcon implements Icon {
                     g2.draw(gear);
                     break;
                 }
+                case TOP_SQL: {
+                    // ranking: bars from the longest
+                    g2.setColor(color);
+                    g2.fill(new Rectangle2D.Double(2, 2.5, 12, 2.6));
+                    g2.fill(new Rectangle2D.Double(2, 6.7, 8.5, 2.6));
+                    g2.fill(new Rectangle2D.Double(2, 10.9, 5, 2.6));
+                    break;
+                }
+                case RAW: {
+                    // table: header row and grid
+                    g2.setColor(fill);
+                    g2.fill(new Rectangle2D.Double(1.5, 2.5, 13, 3));
+                    g2.setColor(color);
+                    g2.setStroke(new BasicStroke(1f));
+                    g2.draw(new Rectangle2D.Double(1.5, 2.5, 13, 11));
+                    g2.draw(new Line2D.Double(1.5, 5.5, 14.5, 5.5));
+                    g2.draw(new Line2D.Double(1.5, 9.5, 14.5, 9.5));
+                    g2.draw(new Line2D.Double(6, 2.5, 6, 13.5));
+                    break;
+                }
+                case REPORT: {
+                    // document with text lines
+                    Path2D page = new Path2D.Double();
+                    page.moveTo(3, 1.5);
+                    page.lineTo(10, 1.5);
+                    page.lineTo(13, 4.5);
+                    page.lineTo(13, 14.5);
+                    page.lineTo(3, 14.5);
+                    page.closePath();
+                    g2.setColor(fill);
+                    g2.fill(page);
+                    g2.setColor(color);
+                    g2.setStroke(new BasicStroke(1f));
+                    g2.draw(page);
+                    g2.draw(new Line2D.Double(5, 7, 11, 7));
+                    g2.draw(new Line2D.Double(5, 9.5, 11, 9.5));
+                    g2.draw(new Line2D.Double(5, 12, 9, 12));
+                    break;
+                }
+                case LOCKS: {
+                    // padlock
+                    g2.setColor(color);
+                    g2.draw(new Arc2D.Double(4.5, 1.5, 7, 8, 0, 180, Arc2D.OPEN));
+                    g2.draw(new Line2D.Double(4.5, 5.5, 4.5, 7.5));
+                    g2.draw(new Line2D.Double(11.5, 5.5, 11.5, 7.5));
+                    g2.fill(new java.awt.geom.RoundRectangle2D.Double(3, 7.5, 10, 7, 2, 2));
+                    break;
+                }
+                case DETAIL: {
+                    // magnifier
+                    g2.setColor(fill);
+                    g2.fill(new Ellipse2D.Double(2, 2, 8.5, 8.5));
+                    g2.setColor(color);
+                    g2.draw(new Ellipse2D.Double(2, 2, 8.5, 8.5));
+                    g2.setStroke(new BasicStroke(2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+                    g2.draw(new Line2D.Double(9.5, 9.5, 14, 14));
+                    break;
+                }
                 default:
             }
         } finally {
@@ -140,6 +198,16 @@ public class TabIcon implements Icon {
                 return dark ? new Color(185, 140, 240) : new Color(120, 70, 190);
             case ADMIN:
                 return dark ? new Color(175, 180, 190) : new Color(95, 100, 110);
+            case TOP_SQL:
+                return dark ? new Color(240, 140, 90) : new Color(205, 90, 40);
+            case RAW:
+                return dark ? new Color(150, 170, 200) : new Color(80, 100, 140);
+            case REPORT:
+                return dark ? new Color(95, 160, 255) : new Color(25, 100, 210);
+            case LOCKS:
+                return dark ? new Color(230, 190, 70) : new Color(170, 120, 0);
+            case DETAIL:
+                return dark ? new Color(185, 140, 240) : new Color(120, 70, 190);
             default:
                 return dark ? new Color(80, 200, 200) : new Color(0, 130, 140);
         }

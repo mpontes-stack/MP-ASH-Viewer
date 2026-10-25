@@ -5,7 +5,6 @@ import core.admin.AutoPurge;
 import core.admin.HistoryStore;
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.Font;
 import java.awt.event.HierarchyEvent;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
@@ -24,7 +23,6 @@ import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import lombok.extern.slf4j.Slf4j;
@@ -77,7 +75,7 @@ public class AdminPanel extends JPanel {
         export.addActionListener(e -> export());
 
         JPanel top = new JPanel(new MigLayout("fillx, ins 8 8 4 8", "[grow, fill]"));
-        top.add(title(Labels.getLabel("gui.admin.history")), "split 2, gapbottom 2");
+        top.add(gui.util.Ui.title(Labels.getLabel("gui.admin.history")), "split 2, gapbottom 2");
         top.add(new JSeparator(), "growx, wrap");
         top.add(summary, "wrap");
         top.add(sqlTexts, "wrap");
@@ -95,11 +93,18 @@ public class AdminPanel extends JPanel {
 
         // a short list with its own scroll bar: the tab has room for other sections (backup) below
         table.setVisibleRowCount(VISIBLE_ROWS);
+        int[] widths = {280, 80, 120, 120, 50, 95, 200};
+        for (int i = 0; i < widths.length; i++) {
+            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+        }
         JPanel history = new JPanel(new BorderLayout());
         history.add(top, BorderLayout.NORTH);
         history.add(new JScrollPane(table), BorderLayout.CENTER);
         history.add(buttons, BorderLayout.SOUTH);
-        add(history, BorderLayout.NORTH);
+        // not wider than needed: the columns stay readable on wide screens
+        JPanel narrow = new JPanel(new MigLayout("ins 0", "[fill, 0:1050:1050]"));
+        narrow.add(history, "growx");
+        add(narrow, BorderLayout.NORTH);
         updateButtons();
 
         addHierarchyListener(e -> {
@@ -301,14 +306,6 @@ public class AdminPanel extends JPanel {
         } catch (NumberFormatException e) {
             return 0;
         }
-    }
-
-    private static JLabel title(String text) {
-        JLabel title = new JLabel(text);
-        title.setFont(title.getFont().deriveFont(Font.BOLD));
-        title.setForeground(UIManager.getColor("Component.accentColor") != null
-                ? UIManager.getColor("Component.accentColor") : title.getForeground());
-        return title;
     }
 
     static String formatSize(long bytes) {

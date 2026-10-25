@@ -265,8 +265,8 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         rightPaneSession.setViewportView(this.getGanttDataToViewSession().getJXTable());
         rightPaneSession.setVerticalScrollBar(rightPaneSession.getVerticalScrollBar());
 
-        splitPaneSqlSession.setLeftComponent(leftPaneSql);
-        splitPaneSqlSession.setRightComponent(rightPaneSession);
+        splitPaneSqlSession.setLeftComponent(titled(Labels.getLabel("gui.gantt.sql"), leftPaneSql));
+        splitPaneSqlSession.setRightComponent(titled(Labels.getLabel("gui.gantt.sessions"), rightPaneSession));
         splitPaneSqlSession.setDividerLocation(this.getWidth() / 2);
         splitPaneSqlSession.setOneTouchExpandable(true);
 
@@ -280,6 +280,16 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         this.main.add(tables);
         this.repaint();
         this.validate();
+    }
+
+    /** Table under a blue title */
+    private static JPanel titled(String title, JComponent table) {
+        JPanel head = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        head.add(gui.util.Ui.title(title));
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(head, BorderLayout.NORTH);
+        panel.add(table, BorderLayout.CENTER);
+        return panel;
     }
 
     /** "Exportar CSV" menu: Top SQL or Top sessions, with the samples of each wait class */

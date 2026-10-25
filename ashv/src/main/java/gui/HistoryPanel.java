@@ -6,6 +6,7 @@ import core.filter.FilteredAshLoader;
 import core.manager.ColorManager;
 import core.processing.GetFromRemoteAndStore;
 import gui.chart.CategoryTableXYDatasetRDA;
+import gui.custom.TabIcon;
 import gui.chart.ChartDatasetManager;
 import gui.chart.GroupByChart;
 import core.manager.ConstantManager;
@@ -227,8 +228,8 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
             rawDataTable20.setAshFilter(ashFilter, false);
         }
 
-        historyGanttAndRaw.add("Top sql & sessions", monitorGantt20);
-        historyGanttAndRaw.add("Raw data", rawDataTable20);
+        historyGanttAndRaw.addTab("Top sql & sessions", new TabIcon(TabIcon.Type.TOP_SQL), monitorGantt20);
+        historyGanttAndRaw.addTab("Raw data", new TabIcon(TabIcon.Type.RAW), rawDataTable20);
 
         mainStackChartPanelTA.addChartListenerReleaseMouse(monitorGantt20);
         mainStackChartPanelTA.addChartListenerReleaseMouse(rawDataTable20);
@@ -236,7 +237,7 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
         if (ashFilter != null) {
             long[] period = {(long) ganttParam.getBeginTime(), (long) ganttParam.getEndTime()};
             LockTreePanel lockTreePanel = new LockTreePanel(storeManager, ashFilter, () -> period, objectNames, false);
-            historyGanttAndRaw.add(Labels.getLabel("gui.lock.tab"), lockTreePanel);
+            historyGanttAndRaw.addTab(Labels.getLabel("gui.lock.tab"), new TabIcon(TabIcon.Type.LOCKS), lockTreePanel);
             mainStackChartPanelTA.addChartListenerReleaseMouse(lockTreePanel);
         }
 
@@ -280,8 +281,8 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
             rawDataTableInner20.setAshFilter(ashFilter, false);
         }
 
-        mainGanttAndRaw.add("Top sql & sessions", monitorGantt20);
-        mainGanttAndRaw.add("Raw data", rawDataTableInner20);
+        mainGanttAndRaw.addTab("Top sql & sessions", new TabIcon(TabIcon.Type.TOP_SQL), monitorGantt20);
+        mainGanttAndRaw.addTab("Raw data", new TabIcon(TabIcon.Type.RAW), rawDataTableInner20);
 
         LinkedHashSet<NameChartDataset> nameChartDatasetDetail = new LinkedHashSet<>();
 
@@ -399,8 +400,8 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
 
         loadDataToDetail(ganttParam, detailSplitPane);
 
-        tabsTopActAndDetails.add("Top activity", topASplitPane);
-        tabsTopActAndDetails.add("Detail", detailSplitPane);
+        tabsTopActAndDetails.addTab("Top activity", new TabIcon(TabIcon.Type.ACTIVITY), topASplitPane);
+        tabsTopActAndDetails.addTab("Detail", new TabIcon(TabIcon.Type.DETAIL), detailSplitPane);
 
         detailJPanel.removeAll();
         detailJPanel.add(tabsTopActAndDetails, BorderLayout.CENTER);
