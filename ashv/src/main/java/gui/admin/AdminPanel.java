@@ -40,6 +40,7 @@ import store.StoreManager;
 @Slf4j
 public class AdminPanel extends JPanel {
     private static final long DAY = 24 * 3600_000L;
+    private static final int VISIBLE_ROWS = 10;
     private static final DecimalFormatSymbols PT_BR = DecimalFormatSymbols.getInstance(new Locale("pt", "BR"));
 
     private final StoreManager storeManager;
@@ -99,9 +100,13 @@ public class AdminPanel extends JPanel {
         buttons.add(progressText, "growx, split 2");
         buttons.add(cancel, "gapleft 12");
 
-        add(top, BorderLayout.NORTH);
-        add(new JScrollPane(table), BorderLayout.CENTER);
-        add(buttons, BorderLayout.SOUTH);
+        // a short list with its own scroll bar: the tab has room for other sections (backup) below
+        table.setVisibleRowCount(VISIBLE_ROWS);
+        JPanel history = new JPanel(new BorderLayout());
+        history.add(top, BorderLayout.NORTH);
+        history.add(new JScrollPane(table), BorderLayout.CENTER);
+        history.add(buttons, BorderLayout.SOUTH);
+        add(history, BorderLayout.NORTH);
         updateButtons();
 
         addHierarchyListener(e -> {
