@@ -81,7 +81,7 @@ public class MainWindow {
     }
 
     private void initJFrame(final BasicFrame jFrame){
-        jFrame.setTitle(AppLogo.NAME);
+        jFrame.setTitle(AppLogo.NAME + " " + AppLogo.VERSION);
         jFrame.setIconImages(AppLogo.windowIcons());
         jFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         jFrame.setVisible(true);

@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public final class AppLogo {
     public static final String NAME = "MP-ASH-Viewer";
+    /** Version of the fork (git tag v1.0); the Maven artifact keeps the upstream numbering */
+    public static final String VERSION = "1.0";
 
     private static final Color BROWN = new Color(92, 58, 30);       // logo text color
     private static final Color BROWN_DARK_THEME = new Color(214, 170, 120);
@@ -33,7 +35,9 @@ public final class AppLogo {
      * @param fontDelta  font size relative to the interface font
      */
     public static JLabel label(int iconHeight, float fontDelta) {
-        JLabel label = new JLabel(NAME);
+        // the version in a smaller size after the name
+        JLabel label = new JLabel("<html>" + NAME + " <span style='font-size:85%; font-weight:normal'>" + VERSION
+                + "</span></html>");
         Image image = monkey(iconHeight);
         if (image != null) {
             label.setIcon(new ImageIcon(image));
@@ -42,7 +46,7 @@ public final class AppLogo {
         label.setHorizontalTextPosition(SwingConstants.RIGHT);
         label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() + fontDelta));
         Themes.foreground(label, BROWN, BROWN_DARK_THEME);
-        label.setToolTipText(NAME);
+        label.setToolTipText(NAME + " " + VERSION);
         return label;
     }
 

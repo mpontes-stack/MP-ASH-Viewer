@@ -123,7 +123,7 @@ public final class HistoryBackup {
             manifest.put("samples", String.valueOf(counts[0]));
             manifest.put("sql.texts", String.valueOf(counts[1]));
             manifest.put("exported.at", f.format(new Date()));
-            manifest.put("exported.by", "MP-ASH-Viewer");
+            manifest.put("exported.by", gui.custom.AppLogo.NAME + " " + gui.custom.AppLogo.VERSION);
             if (!zip(temp.toFile(), zip, manifest, sanitized(config), stop, progress)) {
                 Files.deleteIfExists(zip.toPath());
                 return -1;
