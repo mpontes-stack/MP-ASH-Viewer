@@ -22,9 +22,11 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
 
 ## Architecture (ashv)
 
-- `Main` → `Themes.apply` → Dagger (`config.dagger.MainComponent`) → `gui.MainWindow`.
-- `gui/connect/ConnectToDbArea`: connection dialog (connections tree, theme combo). Connection configs are YAML
-  files in `configuration/` (password encrypted); history per connection in `database/<connection name>/`.
+- `Main` → `Languages.apply` → `Themes.apply` → Dagger (`config.dagger.MainComponent`) → `gui.MainWindow`.
+- `gui/connect/ConnectToDbArea`: connection dialog (connections tree, theme and language combos, "Import
+  history..."). Connection configs are YAML files in `configuration/` (password encrypted); history per connection in
+  `database/<connection name>/`. A connection without URL opens offline (history only), and one without a stored
+  password must not fail (imported histories have neither).
 - `profile/*`: one `IProfile` per database type. `OracleSE` builds its own ASH from `v$session` every second (most
   connections use it); `OracleEE` reads `v$active_session_history` (on CPU, wait class / event come empty: treat
   as CPU); `Postgres*` reads `pg_stat_activity`.
@@ -36,7 +38,14 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
 - `core/filter/AshFilter` (global filter, AND between columns, OR inside one, `!COL` exclusions) and
   `AshFilter.Matcher` (not thread safe: one per task). `FilteredAshLoader` rebuilds charts from raw samples.
 - `gui/MonitorDbPanel`: builds the tabs. `gui/compare` + `core/compare/PeriodComparison`: "Comparar" tab.
-  `gui/snapshot/SnapshotPanel`: "Agora" tabs. `gui/admin` + `core/admin`: "Admin" tab (disk usage, purge, keep days). `gui/lock`: lock tree. `gui/util/Themes`: light / dark / classic.
+  `gui/snapshot/SnapshotPanel`: "Agora" tabs. `gui/admin` + `core/admin`: "Admin" tab
+  (`HistoryStore`: disk usage and purge; `AutoPurge`: "Keep (days)" per connection in Preferences
+  `MP-ASH-Viewer/retain`; `HistoryBackup`: export / import of a period as a .zip that holds a ready Berkeley DB;
+  `TaskProgress`: progress bar with cancel). `gui/lock`: lock tree. `gui/util/Themes`: light / dark / classic.
+- Tabs: `MonitorDbPanel` adds them in this order: Top Activity, History, Compare, Now: Sessions, Now: Resources,
+  Admin (offline: History, Compare, Admin). Every tab and sub tab has a drawn icon (`gui/custom/TabIcon`).
+- Look: `gui/util/Ui.title` for blue section titles and `Ui.highlight` for bars apart from the background (filter
+  bar); use them in new screens instead of new colors.
 - UI texts through `config.Labels`: `messages.properties` in **English** (the default, also used for any missing
   key) and `messages_pt.properties` in Portuguese (UTF-8). `gui/util/Languages` applies the language chosen in the
   connection dialog (or the system one) at startup: texts, `Locale.setDefault` (number and date formats, date
@@ -51,7 +60,18 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
   New columns go at the end; `ConfigurationManager.isAppendedOnly` upgrades existing configs and rows stored before
   show the new columns as empty. Never reorder or remove columns.
 - **Cost on production:** the queries run every second on production databases. Keep additions cheap (columns of
-  `v$session`, scalar lookups by key) and explain the cost before adding anything.
+  `v$session`, scalar lookups by key) and explain the cost before adding anything. Today OracleSE also reads
+  `SQL_EXEC_ID` and the plan of the running child (`v$sql` by sql_id + child_number); `SqlTextCapture` reads
+  `v$sql` every 10 min in batches of 100 SQL_IDs.
+- **PDB:** many monitored databases are PDBs, where some `v$` views are empty (`v$resource_limit`) or show only the
+  PDB. Check new `v$` queries inside the PDB and in the CDB (the test database is a PDB; `/ as sysdba` in the
+  container is the CDB).
+- **Small heap:** end users run the app with `-Xmx128m` or `-Xmx256m`. The Berkeley DB cache is 50% of the heap;
+  histories opened for a task (Admin) use 24 MB. Test heavy operations with `-Xmx128m`.
+- **Berkeley DB:** one environment per folder per process (the open connection uses `StoreManager`'s; others are
+  opened read only or for the task and closed). Stores use deferred write: `sync()` after changes. Deleting does
+  not free disk space until `cleanLog()` + checkpoint. Dictionary entities use DPL sequences: when copying
+  entities with their ids, advance the sequences of the target (see `HistoryBackup`).
 - **Preferences:** the node `ASH-Viewer` holds connection secrets; app settings of this fork go in `MP-ASH-Viewer`.
 - **Colors in SwingX tables:** `JXTable` resets renderer colors; use `ColorHighlighter` (see `ComparePanel`).
   Pick light and dark variants (`Themes.isDark()`); charts keep the colors they were created with.
@@ -59,7 +79,11 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
   code. Check with `python3 tools/i18n/check_messages.py`. Never decide by comparing a translated message (use a flag).
 - **Numbers and dates** use the default locale (the app language): no hardcoded `new Locale("pt", "BR")`. CSV files
   follow the system locale (`Languages.systemLocale()`), as Excel does.
-- **Red means "negative" to the owner:** increases are blue, decreases green (Comparar).
+- **Red means "negative" to the owner:** increases are blue, decreases green (Comparar). Bars that show a size
+  ("A × B") use colors that mean neither: A gray, B orange.
+- **Executions from samples:** the app samples every ~1 s, so executions shorter than that are undercounted and look
+  like ~1 s each (seen: 242 "1 s" executions for 1,440,000 real ones of 0.125 ms). Show "≥ N" / "< 1 s" and no Cause
+  when most executions are seen in a single sample (`PeriodComparison.Executions.isShort`).
 - Do not use the owner's real data (`configuration/`, `database/`, `filters.yaml` of their install) in commits,
   and work on copies of it in tests.
 
@@ -77,7 +101,10 @@ cm.loadCurrentConfiguration(conn); sm.setUpBDBAndDAO(conn); org.rtv.Options.getI
 Run from a scratch directory holding copies of `configuration/<conn>` and `database/<conn>`:
 `java -Djava.awt.headless=true -Djava.util.prefs.userRoot=<scratch>/prefs -cp app.jar:bc-fips-1.0.2.4.jar:<test classes> Test`.
 Panels can be rendered to PNG (set size, lay out recursively, `printAll`) to review layout in both themes.
-Components that load only when `isShowing()` stay empty headless. A SwingX RolloverProducer exception is noise.
+Call `gui.util.Languages.apply("en"|"pt")` and `Themes.apply(...)` before creating components to check both
+languages and themes. Components that load only when `isShowing()` stay empty headless, and dialogs (`JDialog`,
+`JOptionPane`) cannot be shown without a display: render their content panel, or leave them to the owner.
+A SwingX RolloverProducer exception is noise.
 
 ## Test database and test load
 

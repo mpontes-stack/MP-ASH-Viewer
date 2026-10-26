@@ -120,7 +120,7 @@ commit;" >/dev/null || die "rode antes: $0 setup"
             launch mixed_short many_execs.sql "$minutes" ;;
         *) die "cenario desconhecido: $scenario" ;;
     esac
-    case "$scenario" in plan_change|mixed) sessions=1 ;; esac
+    case "$scenario" in plan_change) sessions=1 ;; mixed) sessions=4 ;; esac
     echo "cenario: $scenario | sessoes: $sessions | inicio (hora do banco): $start | duracao: ${minutes} min"
     [ "$scenario" = plan_change ] && echo "troca de plano na metade (indice fica visivel): veja $LOGS/plan_change.log"
     echo "logs: $LOGS | filtro no app: MODULE = ashv_test, ACTION = $scenario"

@@ -18,6 +18,7 @@ import gui.detail.SessionDetail;
 import gui.detail.SqlDetail;
 import gui.filter.FilterPopup;
 import config.Labels;
+import core.compare.PeriodComparison;
 import gui.util.CsvExport;
 import gui.util.SqlTextTooltip;
 import gui.util.ProgressBarUtil;
@@ -37,6 +38,7 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -55,6 +57,12 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
     private GanttDataById2 ganttDataByIdSessionId;
 
     private String[][] columnNamesSqls = {{"Activity %", "SQL ID", "SQL type"}};
+
+    /** Executions are counted from the raw samples: only for selections up to this length */
+    private static final long EXEC_STATS_MAX_RANGE = 6 * 3600_000L;
+    /** Executions per SQL_ID of the selection; null when SQL_EXEC_ID is not collected (columns hidden) */
+    private volatile Map<String, PeriodComparison.ExecutionStats> execStats;
+    private volatile boolean execStatsTooLong;
     private String[][] columnNamesSessions = {{"Activity %", "Session ID", "Session Serial#", "Username", "Program"}};
 
     @Getter @Setter private String waitClassG = "";
@@ -168,14 +176,87 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
             this.ganttDataByIdSessionId.computeGanttDataFromBDB(ganttParamTo); // Session Id
         }
 
+        loadExecStats(ganttParamTo);
         this.addGanttTablesToJPanel();
+    }
+
+    /** Executions and time per execution of the selection, with the rule of the comparison (short ones: a minimum) */
+    private void loadExecStats(GanttParam ganttParam) {
+        execStats = null;
+        execStatsTooLong = false;
+        boolean collected = iProfile != null && storeManager.getConfigurationManager().getCurrentConfiguration()
+                .getSqlColProfileList().stream().anyMatch(c -> c.getColName().equalsIgnoreCase("SQL_EXEC_ID"));
+        if (!collected || ashFilter == null) {
+            return;
+        }
+        long begin = (long) ganttParam.getBeginTime();
+        long end = (long) ganttParam.getEndTime();
+        if (end - begin > EXEC_STATS_MAX_RANGE) {
+            execStatsTooLong = true;
+            execStats = Collections.emptyMap();
+            return;
+        }
+        try {
+            execStats = PeriodComparison.executionsBySqlId(storeManager, iProfile, ashFilter.matcher(
+                    storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList()), begin, end);
+        } catch (Exception e) {
+            log.error("Executions of the selection", e);
+            execStats = null;
+        }
+    }
+
+    /** A cell of the executions columns: text as shown, sorted by its number */
+    private static final class ExecCell implements Comparable<ExecCell> {
+        private final double sortKey;
+        private final String text;
+
+        ExecCell(double sortKey, String text) {
+            this.sortKey = sortKey;
+            this.text = text;
+        }
+
+        @Override
+        public int compareTo(ExecCell o) {
+            return Double.compare(sortKey, o.sortKey);
+        }
+
+        @Override
+        public String toString() {
+            return text;
+        }
+    }
+
+    /** The 3 columns of the SQL table plus Execs and Time/exec */
+    private Object[][] withExecutions(Object[][] data) {
+        Map<String, PeriodComparison.ExecutionStats> stats = execStats;
+        java.text.DecimalFormat count = new java.text.DecimalFormat("#,##0");
+        Object[][] out = new Object[data.length][];
+        for (int r = 0; r < data.length; r++) {
+            out[r] = Arrays.copyOf(data[r], 5);
+            PeriodComparison.ExecutionStats e = stats.get(String.valueOf(data[r][1]));
+            if (e == null) {
+                out[r][3] = new ExecCell(-1, "—");
+                out[r][4] = new ExecCell(-1, "—");
+            } else if (e.isShort()) {
+                out[r][3] = new ExecCell(e.getCount(), "≥ " + count.format(e.getCount()));
+                out[r][4] = new ExecCell(0.5, Labels.getLabel("gui.compare.short"));
+            } else {
+                out[r][3] = new ExecCell(e.getCount(), count.format(e.getCount()));
+                out[r][4] = new ExecCell(e.getSecondsPerExecution(), gui.compare.ComparePanel.time(e.getSecondsPerExecution()));
+            }
+        }
+        return out;
     }
 
     private GanttTable getGanttDataToViewSqlId() {
         final GanttTable tableGanttSql;
+        boolean withExecs = execStats != null;
+        String[][] names = withExecs ? new String[][]{{columnNamesSqls[0][0], columnNamesSqls[0][1], columnNamesSqls[0][2],
+                Labels.getLabel("gui.gantt.execs"), Labels.getLabel("gui.gantt.tpe")}} : columnNamesSqls;
+        Object[][] rows = ganttDataByIdSqlId.getDataToGantt(3);
         tableGanttSql = new GanttTable(
-                ganttDataByIdSqlId.getDataToGantt(3),
-                columnNamesSqls,
+                withExecs ? withExecutions(rows) : rows,
+                names,
                 getBasicJTableList(),
                 ganttDataByIdSqlId.getListClassAndEvents());
         tableGanttSql.setRowHeightForJtable(23);
@@ -184,6 +265,19 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         tableGanttSql.getJXTable().getColumnExt(0).setEditable(false);
         tableGanttSql.getJXTable().getColumnExt(1).setEditable(false);
         tableGanttSql.getJXTable().getColumnExt(2).setEditable(false);
+        if (withExecs) {
+            String tip = Labels.getLabel(execStatsTooLong ? "gui.gantt.execs.toolong" : "gui.gantt.execs.tooltip");
+            for (int c = 3; c <= 4; c++) {
+                tableGanttSql.getJXTable().getColumnExt(c).setEditable(false);
+                tableGanttSql.getJXTable().getColumnExt(c).setToolTipText(tip);
+                ((javax.swing.table.TableRowSorter<?>) tableGanttSql.getJXTable().getRowSorter())
+                        .setComparator(c, Comparator.naturalOrder());
+            }
+            javax.swing.table.DefaultTableCellRenderer right = new javax.swing.table.DefaultTableCellRenderer();
+            right.setHorizontalAlignment(SwingConstants.RIGHT);
+            tableGanttSql.getJXTable().getColumnExt(3).setCellRenderer(right);
+            tableGanttSql.getJXTable().getColumnExt(4).setCellRenderer(right);
+        }
 
         tableGanttSql.getJXTable().setCellSelectionEnabled(true);
 
@@ -308,6 +402,14 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
 
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         bar.add(export);
+        // the period the tables cover, as the Locks sub tab shows it
+        if (lastGanttParamIn != null) {
+            JLabel period = new JLabel(String.format(Labels.getLabel("gui.gantt.period"), gui.util.Ui.period(
+                    (long) lastGanttParamIn.getBeginTime(), (long) lastGanttParamIn.getEndTime())));
+            period.setForeground(gui.util.Ui.accent(period));
+            bar.add(Box.createHorizontalStrut(12));
+            bar.add(period);
+        }
         return bar;
     }
 

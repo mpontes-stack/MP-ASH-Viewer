@@ -60,6 +60,15 @@ public final class Ui {
         bar.setBorder(BorderFactory.createCompoundBorder(new EtchedBorder(), BorderFactory.createEmptyBorder(1, 2, 1, 2)));
     }
 
+    /** "26/10/2026 07:57:00  –  08:03:00" (the date once when both ends are on the same day) */
+    public static String period(long begin, long end) {
+        java.text.SimpleDateFormat day = new java.text.SimpleDateFormat("yyyyMMdd");
+        boolean sameDay = day.format(new java.util.Date(begin)).equals(day.format(new java.util.Date(end)));
+        java.text.SimpleDateFormat full = new java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        java.text.SimpleDateFormat time = new java.text.SimpleDateFormat("HH:mm:ss");
+        return full.format(new java.util.Date(begin)) + "  –  " + (sameDay ? time : full).format(new java.util.Date(end));
+    }
+
     private static int clamp(int v) {
         return Math.max(0, Math.min(255, v));
     }

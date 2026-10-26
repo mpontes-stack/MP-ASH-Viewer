@@ -83,6 +83,45 @@ public class PeriodComparison {
         return new PeriodComparison(a, b, new ArrayList<>(dimensionCols.keySet()));
     }
 
+    /** Executions of one SQL_ID in a period (Top SQL table), with the same rule as the comparison */
+    @Getter
+    public static final class ExecutionStats {
+        private final long count;
+        /** Shorter than the sampling interval: count is a minimum, time per execution unknown */
+        private final boolean isShort;
+        /** DB time per execution, seconds */
+        private final double secondsPerExecution;
+
+        ExecutionStats(long count, boolean isShort, double secondsPerExecution) {
+            this.count = count;
+            this.isShort = isShort;
+            this.secondsPerExecution = secondsPerExecution;
+        }
+    }
+
+    /**
+     * Executions per SQL_ID in [from, to] (distinct SQL_EXEC_ID + SQL_EXEC_START); empty when they are not collected
+     */
+    public static Map<String, ExecutionStats> executionsBySqlId(StoreManager storeManager, IProfile iProfile,
+                                                                AshFilter.Matcher matcher, long from, long to) {
+        List<SqlColProfile> cols = storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList();
+        if (cols == null) return Collections.emptyMap();
+        SqlColProfile sqlIdCol = findCol(cols, SQL_ID).orElse(null);
+        SqlColProfile execIdCol = findCol(cols, EXEC_ID_COL).orElse(null);
+        if (sqlIdCol == null || execIdCol == null) return Collections.emptyMap();
+        Map<String, SqlColProfile> dimensionCols = new LinkedHashMap<>();
+        dimensionCols.put(SQL_ID, sqlIdCol);
+        Reader reader = new Reader(matcher, dimensionCols, null, null,
+                findCol(cols, iProfile.getWaitClassColName()).orElse(null), findCol(cols, iProfile.getEventColName()).orElse(null),
+                null, iProfile.getWaitClass((byte) 0), execIdCol, findCol(cols, EXEC_START_COL).orElse(null));
+        Period period = reader.read(storeManager, new long[]{from, to}, () -> false);
+        Map<String, ExecutionStats> out = new HashMap<>();
+        if (period != null) {
+            period.execs.forEach((sqlId, e) -> out.put(sqlId, new ExecutionStats(e.count(), e.isShort(), e.secondsPerExecution(period))));
+        }
+        return out;
+    }
+
     /** Values of a column in both periods, the biggest increase first */
     public List<Item> items(String dimension, Measure measure) {
         Map<String, Counter> inA = a.byDimension.getOrDefault(dimension, Collections.emptyMap());
@@ -229,10 +268,25 @@ public class PeriodComparison {
             return execB == null ? Double.NaN : execB.secondsPerExecution(b);
         }
 
-        /** Why it went up or down: more / fewer executions, slower / faster executions, or both */
+        /** Executions in A shorter than the sampling interval: count is a minimum, time per execution unknown */
+        public boolean isShortA() {
+            return execA != null && execA.isShort();
+        }
+
+        public boolean isShortB() {
+            return execB != null && execB.isShort();
+        }
+
+        /**
+         * Why it went up or down: more / fewer executions, slower / faster executions, or both. None when the
+         * executions are too short to be counted, or when the same executions run across both periods (each period
+         * sees a part of them)
+         */
         public Cause getCause() {
             State state = getState();
-            if (execA == null || execB == null || (state != State.UP && state != State.DOWN)) {
+            if (execA == null || execB == null || (state != State.UP && state != State.DOWN)
+                    || execA.isShort() || execB.isShort()
+                    || execA.sharedWith(execB) * 2 >= Math.min(execA.count(), execB.count())) {
                 return Cause.NONE;
             }
             double executions = (double) execB.count() / execA.count();
@@ -274,6 +328,20 @@ public class PeriodComparison {
 
         long count() {
             return samples.size();
+        }
+
+        /**
+         * Most executions were seen in a single sample: they are shorter than the sampling interval, so the count is
+         * only a minimum and the time per execution is not known (each one looks like one interval)
+         */
+        boolean isShort() {
+            long once = samples.values().stream().filter(n -> n == 1).count();
+            return once * 2 > samples.size();
+        }
+
+        /** Executions also seen in the other period (one running across both) */
+        long sharedWith(Executions other) {
+            return samples.keySet().stream().filter(other.samples::containsKey).count();
         }
 
         double secondsPerExecution(Period period) {

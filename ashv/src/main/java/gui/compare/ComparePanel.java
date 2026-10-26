@@ -19,7 +19,9 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.event.HierarchyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -751,7 +753,10 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                 setText(value == null || String.valueOf(value).isEmpty() ? Labels.getLabel("gui.filter.empty") : String.valueOf(value));
             }
         });
-        table.getColumnExt(ItemsModel.COL_BAR).setCellRenderer(new DeltaBarRenderer());
+        table.getColumnExt(ItemsModel.COL_BAR).setCellRenderer(new PairBarRenderer());
+        // room for the two bars of "A × B", each with its letter
+        int letters = table.getFontMetrics(table.getFont().deriveFont(Font.BOLD, Math.max(9f, table.getFont().getSize2D() - 2))).getHeight();
+        table.setRowHeight(Math.max(table.getRowHeight(), 2 * letters + 4));
         // no cause: blank, not "(vazio)"
         table.getColumnExt(ItemsModel.COL_CAUSE).setCellRenderer(new DefaultTableCellRenderer());
         table.packAll();
@@ -875,7 +880,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         return signed(value);
     }
 
-    static String time(double seconds) {
+    public static String time(double seconds) {
         long s = Math.round(seconds);
         if (seconds > 0 && seconds < 10) {
             return new DecimalFormat("0.#", SYMBOLS).format(seconds) + "s";
@@ -911,9 +916,12 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             } else if (modelCol == ItemsModel.COL_DELTA) {
                 setText(signed(v, measure));
             } else if (modelCol == ItemsModel.COL_EXEC_A || modelCol == ItemsModel.COL_EXEC_B) {
-                setText(v < 0 ? "—" : new DecimalFormat("#,##0", SYMBOLS).format(v));
+                // short executions: the samples see at most one per interval, the count is a minimum
+                boolean isShort = ((ItemsModel) table.getModel()).isShort(table.convertRowIndexToModel(row), modelCol == ItemsModel.COL_EXEC_A);
+                setText(v < 0 ? "—" : (isShort ? "≥ " : "") + new DecimalFormat("#,##0", SYMBOLS).format(v));
             } else if (modelCol == ItemsModel.COL_TPE_A || modelCol == ItemsModel.COL_TPE_B) {
-                setText(Double.isNaN(v) ? "—" : time(v));
+                boolean isShort = ((ItemsModel) table.getModel()).isShort(table.convertRowIndexToModel(row), modelCol == ItemsModel.COL_TPE_A);
+                setText(Double.isNaN(v) ? "—" : isShort ? Labels.getLabel("gui.compare.short") : time(v));
             } else if (modelCol == ItemsModel.COL_SHARE || modelCol == ItemsModel.COL_SHARE_A) {
                 setText(new DecimalFormat("0", SYMBOLS).format(v) + "%");
             } else {
@@ -971,65 +979,72 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     }
 
     /**
-     * Difference B - A from the center: to the right blue (worse), to the left green (better), gray when stable;
-     * the biggest difference of the table fills half the cell
+     * "A × B": a thin bar of A (gray) over a bar of B (orange), each with its letter, on the same scale for every row
+     * (the biggest value of the table fills the cell). The bars show the size; the direction is in the colors of the
+     * numbers (Difference, Change), so the bars use colors that mean neither up nor down.
      */
-    private static final class DeltaBarRenderer extends javax.swing.JComponent implements TableCellRenderer {
+    private static final class PairBarRenderer extends javax.swing.JComponent implements TableCellRenderer {
         private JTable table;
-        private double delta;
+        private double a;
+        private double b;
         private double max;
-        private PeriodComparison.State state;
         private boolean selected;
 
         @Override
         public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
                                                        int row, int column) {
             ItemsModel model = (ItemsModel) table.getModel();
+            int modelRow = table.convertRowIndexToModel(row);
             this.table = table;
-            this.delta = value instanceof Double ? (Double) value : 0;
-            this.max = model.maxDelta;
-            this.state = model.state(table.convertRowIndexToModel(row));
+            this.a = model.valueA(modelRow);
+            this.b = model.valueB(modelRow);
+            this.max = model.maxValue;
             this.selected = isSelected;
             return this;
         }
 
         @Override
         protected void paintComponent(Graphics g) {
-            g.setColor(selected ? table.getSelectionBackground() : table.getBackground());
-            g.fillRect(0, 0, getWidth(), getHeight());
+            Graphics2D g2 = (Graphics2D) g;
+            g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            g2.setColor(selected ? table.getSelectionBackground() : table.getBackground());
+            g2.fillRect(0, 0, getWidth(), getHeight());
             boolean dark = Themes.isDark();
-            int x0 = 4;
-            int width = getWidth() - 8;
-            int mid = x0 + width / 2;
-            int h = Math.max(6, getHeight() - 8);
-            int y = (getHeight() - h) / 2;
-            g.setColor(dark ? new Color(255, 255, 255, 25) : new Color(0, 0, 0, 18));
-            g.fillRect(x0, y, width, h);
-            if (max > 0 && delta != 0) {
-                int w = (int) Math.max(1, Math.round((width / 2.0) * Math.abs(delta) / max));
-                g.setColor(color(dark));
-                if (delta > 0) {
-                    g.fillRect(mid, y, Math.min(w, x0 + width - mid), h);
-                } else {
-                    g.fillRect(Math.max(x0, mid - w), y, Math.min(w, mid - x0), h);
-                }
-            }
-            g.setColor(dark ? new Color(200, 200, 200) : new Color(90, 90, 90));
-            g.drawLine(mid, y - 2, mid, y + h + 1);
+            Font font = table.getFont().deriveFont(Font.BOLD, Math.max(9f, table.getFont().getSize2D() - 2));
+            g2.setFont(font);
+            int letter = g2.getFontMetrics().stringWidth("B") + 4;
+            int x0 = 3 + letter;
+            int width = Math.max(10, getWidth() - x0 - 4);
+            int gap = 2;
+            int h = Math.max(3, Math.min(9, (getHeight() - 6 - gap) / 2));
+            int yA = (getHeight() - (2 * h + gap)) / 2;
+            int yB = yA + h + gap;
+            Color track = dark ? new Color(255, 255, 255, 22) : new Color(0, 0, 0, 14);
+            g2.setColor(track);
+            g2.fillRect(x0, yA, width, h);
+            g2.fillRect(x0, yB, width, h);
+            g2.setColor(colorA(dark));
+            g2.fillRect(x0, yA, bar(a, width), h);
+            g2.setColor(colorB(dark));
+            g2.fillRect(x0, yB, bar(b, width), h);
+            g2.setColor(selected ? table.getSelectionForeground() : (dark ? new Color(190, 190, 190) : new Color(90, 90, 90)));
+            // letters centered on their bar (cap height ~ 0.7 of the ascent)
+            int cap = Math.round(g2.getFontMetrics().getAscent() * 0.72f);
+            g2.drawString("A", 3, yA + (h + cap) / 2);
+            g2.drawString("B", 3, yB + (h + cap) / 2);
         }
 
-        private Color color(boolean dark) {
-            switch (state) {
-                case UP:
-                case NEW:
-                    return increaseColor(dark);
-                case DOWN:
-                case GONE:
-                    return decreaseColor(dark);
-                default:
-                    return new Color(150, 150, 150);
-            }
+        private int bar(double v, int width) {
+            return max <= 0 || v <= 0 ? 0 : (int) Math.max(1, Math.round(width * v / max));
         }
+    }
+
+    static Color colorA(boolean dark) {
+        return dark ? new Color(150, 150, 150) : new Color(140, 140, 140);
+    }
+
+    static Color colorB(boolean dark) {
+        return dark ? new Color(240, 150, 60) : new Color(225, 120, 20);
     }
 
     static final class ItemsModel extends AbstractTableModel {
@@ -1059,8 +1074,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         private final double totalA;
         private final double totalB;
         final PeriodComparison.Measure measure;
-        /** Biggest difference of the table: the full half of the bar */
-        final double maxDelta;
+        /** Biggest value of A or B in the table: the full width of the bars */
+        final double maxValue;
 
         ItemsModel(String valueName, List<PeriodComparison.Item> items, PeriodComparison result,
                    PeriodComparison.Measure measure) {
@@ -1071,7 +1086,19 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             this.totalA = result.getA().total(measure);
             this.totalB = result.getB().total(measure);
             this.measure = measure;
-            this.maxDelta = items.stream().mapToDouble(i -> Math.abs(i.getDelta())).max().orElse(0);
+            this.maxValue = items.stream().mapToDouble(i -> Math.max(i.getA(), i.getB())).max().orElse(0);
+        }
+
+        boolean isShort(int row, boolean periodA) {
+            return periodA ? items.get(row).isShortA() : items.get(row).isShortB();
+        }
+
+        double valueA(int row) {
+            return items.get(row).getA();
+        }
+
+        double valueB(int row) {
+            return items.get(row).getB();
         }
 
         PeriodComparison.State state(int row) {
@@ -1141,7 +1168,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                 case COL_VALUE: return item.getValue();
                 case COL_A: return item.getA();
                 case COL_B: return item.getB();
-                case COL_BAR:
+                case COL_BAR: return item.getB(); // sorts by the size in B
                 case COL_DELTA: return item.getDelta();
                 case COL_CHANGE: return item.getChange();
                 case COL_SHARE_A: return totalA == 0 ? 0.0 : item.getA() * 100 / totalA;
