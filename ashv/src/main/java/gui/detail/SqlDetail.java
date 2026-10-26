@@ -205,6 +205,32 @@ public class SqlDetail extends JFrame implements ActionListener {
         );
     }
 
+    /**
+     * Full scans stand out: TABLE / MAT_VIEW ACCESS FULL in bold orange (the warning color of the app), INDEX FULL
+     * SCAN and INDEX FAST FULL SCAN (the whole index is read) in orange
+     */
+    private static void highlightFullScans(JXTreeTable treeTable) {
+        boolean dark = gui.util.Themes.isDark();
+        Color warning = dark ? new Color(240, 170, 60) : new Color(190, 110, 0);
+        org.jdesktop.swingx.decorator.HighlightPredicate tableFull = (renderer, adapter) -> {
+            String op = String.valueOf(adapter.getValueAt(adapter.row, 0)).toUpperCase();
+            return op.contains("ACCESS FULL") || (op.contains("ACCESS") && op.endsWith(" FULL"));
+        };
+        org.jdesktop.swingx.decorator.HighlightPredicate indexFull = (renderer, adapter) -> {
+            String op = String.valueOf(adapter.getValueAt(adapter.row, 0)).toUpperCase();
+            return op.contains("INDEX") && op.contains("FULL SCAN");
+        };
+        treeTable.addHighlighter(new org.jdesktop.swingx.decorator.ColorHighlighter(indexFull, null, warning, null, warning));
+        treeTable.addHighlighter(new org.jdesktop.swingx.decorator.ColorHighlighter(tableFull, null, warning, null, warning));
+        treeTable.addHighlighter(new org.jdesktop.swingx.decorator.AbstractHighlighter(tableFull) {
+            @Override
+            protected java.awt.Component doHighlight(java.awt.Component component, org.jdesktop.swingx.decorator.ComponentAdapter adapter) {
+                component.setFont(component.getFont().deriveFont(java.awt.Font.BOLD));
+                return component;
+            }
+        });
+    }
+
     protected JXTreeTable createTreeTable(TreeTableModel model) {
         if (model == null) {
             return null;
@@ -219,7 +245,10 @@ public class SqlDetail extends JFrame implements ActionListener {
         renderer.setLeafIcon(null);
         treeTable.setTreeCellRenderer(renderer);
         treeTable.setShowGrid(true, true);
-        treeTable.setBackground(new Color(255, 250, 237));
+        // colors of the theme (a fixed light background left the text unreadable in the dark theme)
+        renderer.setBackgroundNonSelectionColor(treeTable.getBackground());
+        renderer.setTextNonSelectionColor(treeTable.getForeground());
+        highlightFullScans(treeTable);
         treeTable.expandAll();
 
         TableColumnModel columnModel = treeTable.getColumnModel();
