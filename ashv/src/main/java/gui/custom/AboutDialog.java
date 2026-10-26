@@ -29,6 +29,7 @@ import net.miginfocom.swing.MigLayout;
 @Slf4j
 public final class AboutDialog {
     public static final String PROJECT_URL = "https://github.com/mpontes-stack/MP-ASH-Viewer";
+    private static final String MAINTAINER_EMAIL = "marco.pontes.app@gmail.com";
     private static final String UPSTREAM_URL = "https://github.com/akardapolov/ASH-Viewer";
     private static final String LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html";
     private static final String LIBRARIES = "JFreeChart · E-Gantt · Berkeley DB Java Edition · SwingX · FlatLaf · "
@@ -69,7 +70,7 @@ public final class AboutDialog {
         section(panel, Labels.getLabel("gui.about.project"));
         row(panel, Labels.getLabel("gui.about.page"), link(PROJECT_URL, PROJECT_URL));
         row(panel, Labels.getLabel("gui.about.version"), new JLabel(AppLogo.NAME + " " + AppLogo.VERSION));
-        row(panel, Labels.getLabel("gui.about.maintainer"), new JLabel("Marco Pontes"));
+        row(panel, Labels.getLabel("gui.about.maintainer"), link("Marco Pontes · " + MAINTAINER_EMAIL, "mailto:" + MAINTAINER_EMAIL));
 
         section(panel, Labels.getLabel("gui.about.credits"));
         row(panel, Labels.getLabel("gui.about.basedon"), link("ASH Viewer · Alexander Kardapolov (akardapolov)", UPSTREAM_URL));
@@ -91,7 +92,7 @@ public final class AboutDialog {
     /** What a bug report needs */
     public static String systemInfo() {
         return AppLogo.NAME + " " + AppLogo.VERSION + "\n"
-                + PROJECT_URL + "\n"
+                + PROJECT_URL + " · " + MAINTAINER_EMAIL + "\n"
                 + "Java " + System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")\n"
                 + System.getProperty("os.name") + " " + System.getProperty("os.version") + " " + System.getProperty("os.arch") + "\n"
                 + "Max memory: " + (Runtime.getRuntime().maxMemory() >> 20) + " MB\n"
@@ -121,15 +122,21 @@ public final class AboutDialog {
             @Override
             public void mouseClicked(MouseEvent e) {
                 try {
-                    if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                        Desktop.getDesktop().browse(new URI(url));
+                    boolean mail = url.startsWith("mailto:");
+                    Desktop.Action action = mail ? Desktop.Action.MAIL : Desktop.Action.BROWSE;
+                    if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(action)) {
+                        if (mail) {
+                            Desktop.getDesktop().mail(new URI(url));
+                        } else {
+                            Desktop.getDesktop().browse(new URI(url));
+                        }
                         return;
                     }
                 } catch (Exception ex) {
                     log.info("Open " + url + ": " + ex.getMessage());
                 }
                 // no browser: the address goes to the clipboard
-                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url.replace("mailto:", "")), null);
                 link.setToolTipText(url + " (" + Labels.getLabel("gui.about.link.copied") + ")");
             }
         });
