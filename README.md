@@ -1,142 +1,98 @@
-# ASH Viewer
+<p align="center"><img src="docs/images/logo.png" width="120" alt="MP-ASH-Viewer"></p>
 
-ASH Viewer provides graphical view of active session history data within the database.
+<h1 align="center">MP-ASH-Viewer</h1>
 
-Supported databases: Oracle, PostgreSQL
+Active Session History for Oracle, **including Standard Edition and without the Diagnostics Pack**: the app samples
+the active sessions every second, keeps them in a local history and shows them live, as history and as a comparison
+of two periods.
 
-## Table of contents
+MP-ASH-Viewer is a fork of [ASH Viewer](https://github.com/akardapolov/ASH-Viewer) by Alexander Kardapolov
+(discontinued), extended and maintained by Marco Pontes.
 
-- [Quick start](#quick-start)
-- [How it works](#how-it-works)
-- [Build](#build)
-- [Security](#security)
-- [Bugs and feature requests](#bugs-and-feature-requests)
-- [Downloads](#downloads)
-- [Based on](#based-on)
-- [License](#license)
-- [Contact](#contact)
+![Top Activity](docs/images/top-activity.png)
 
-![ASH-Viewer](media/main.png)
+## Main features
+
+- **Top Activity**: active sessions by wait class, live, with Top SQL and Top sessions of any selected range
+- **Filters**: by any collected column (module, username, machine, SQL_ID...), with favorites; "Group by" any column
+- **History**: the local history of every connection, back to any day it was collected
+- **Compare**: two periods side by side (before / after a deploy, yesterday x today, two runs of a batch), by wait
+  class and by SQL_ID, module, session...; detects **execution plan changes** and tells whether a SQL went up
+  because it ran **more times** or **slower**
+- **Locks**: blocking tree live and in the history, with the final blocker and the wait it caused
+- **Now: Sessions / Now: Resources**: a live view of the database: sessions, locks, long operations, jobs, PGA,
+  TEMP, UNDO, tablespaces, FRA, Data Guard
+- **SQL text** of every SQL_ID kept in the local history, also after it leaves the shared pool
+- **Admin**: disk usage of the local histories, purge (manual or automatic), **backup and import** of a period to
+  share with another analyst
+- English and Portuguese, light, dark and classic themes
+
+More details, screenshots and the limits of the sampling: [docs/FEATURES.md](docs/FEATURES.md).
+
+## Supported databases
+
+| Database | Status |
+|---|---|
+| **Oracle** 11.2 or later, Standard and Enterprise Edition, CDB / PDB | Developed and tested on 19c (OracleSE profile) |
+| **PostgreSQL** | Only the collection inherited from the original ASH Viewer (Top Activity, History). The features of this fork were **not developed for PostgreSQL yet**: it is the next planned phase |
+| **MySQL** | Being evaluated |
+
+Oracle RAC: open one connection (one app) per instance.
 
 ## Quick start
-- [Download the latest binary file.](https://github.com/akardapolov/ASH-Viewer/releases)
-- Download JDBC driver for your database ([Oracle](https://www.oracle.com/database/technologies/appdev/jdbc-downloads.html), [PostgreSQL](https://jdbc.postgresql.org/download.html))
-- Unpack the binary archive and run ASH-Viewer.jar
-- Open connection dialog and populate them with data (URL for Oracle database: **jdbc:oracle:thin:@host:port:SID**)
 
- ![ASH-Viewer connection dialog](media/connection.png)
-- Press Connect button and start to monitor your system and highlight a range to show details.
+1. Download the latest release from the [Releases page](https://github.com/mpontes-stack/MP-ASH-Viewer/releases):
+   the application jar and `bc-fips-1.0.2.4.jar`, kept in the same folder.
+2. Download the JDBC driver: [Oracle (ojdbc8.jar or later)](https://www.oracle.com/database/technologies/appdev/jdbc-downloads.html)
+   or [PostgreSQL](https://jdbc.postgresql.org/download.html).
+3. Run it with Java 11 or later:
+   ```bash
+   java -Xmx256m -jar ashv-4.0-SNAPSHOT-jar-with-dependencies.jar
+   ```
+4. In the connection dialog, create a connection: URL `jdbc:oracle:thin:@host:port/service` (or `:SID`), user,
+   password, the JDBC driver jar and the profile **OracleSE** (samples `v$session`, no license needed).
+5. Click **Connect**. The history is kept in `database/` next to the jar.
 
- ![ASH-Viewer Top activity](media/top.png)
-- Review Raw data interface to gain a deep insight into active session history
+## Database privileges
 
-![ASH-Viewer raw data](media/raw.png)
-- Double-click on Top sql & sessions interface to get window with ASH details by sql or session ID
+The monitoring user only reads the dictionary. The simplest is:
 
- ![ASH-Viewer sql details](media/sql.png)
+```sql
+CREATE USER ashv IDENTIFIED BY "<password>";
+GRANT CREATE SESSION, SELECT_CATALOG_ROLE TO ashv;
+```
 
- ![ASH-Viewer session details](media/session.png)
+In a container database create the user in the PDB you monitor (or a common user `C##ASHV` to monitor the root).
+To grant only what the app reads, view by view, use [docs/ashv-grants.sql](docs/ashv-grants.sql).
 
-[Return to Table of Contents](#table-of-contents)
+**Licensing (Oracle):** the **OracleEE** profile reads `v$active_session_history` and the **ASH Report** tab calls
+`DBMS_WORKLOAD_REPOSITORY`: both are part of the Oracle **Diagnostics Pack** (Enterprise Edition). Without that
+license use the **OracleSE** profile and do not use the ASH Report tab.
 
-## How it works
-Active Session History (ASH) is a view in Oracle database that maps a circular buffer in the SGA.
-  The name of the view is V$ACTIVE_SESSION_HISTORY. This view is populated every second
-  and will only contain data for 'active' sessions, which are defined as sessions
-  waiting on a non-idle event or on a CPU.
-  
-ASH Viewer provides graphical Top Activity, similar Top Activity analysis and Drilldown
-    of Oracle Enterprise Manager performance page. ASH Viewer store ASH data locally using
-    embedded database Oracle Berkeley DB Java Edition.
-    
-For Oracle standard edition and PostgreSQL, ASH Viewer emulate ASH, storing active session data on local storage.
-  
-Please note that v$active_session_history is a part of the Oracle Diagnostic Pack and requires a purchase of the ODP license.
-
-[Return to Table of Contents](#table-of-contents)
+The collection runs a light query every second (on `v$session` and, for the plan of the running SQL, a lookup in
+`v$sql` by SQL_ID). Details of every query: [docs/FEATURES.md](docs/FEATURES.md#what-the-app-reads-from-the-database).
 
 ## Build
 
-To compile the application into an executable jar file, do the following:
+Requires JDK 11 or later and Maven:
 
-1. Install JDK version 11 or higher, Maven and Git on your local computer.
-    ```shell
-    java -version  
-    mvn -version
-    git --version 
-    ``` 
-2. Download the source codes of the application to your local computer using Git
+```bash
+mvn -q package -DskipTests
+# ashv/target/ashv-4.0-SNAPSHOT-jar-with-dependencies.jar
+```
 
-    ```shell
-    git clone <url source code storage system>
-    cd ASH-Viewer
-    ```
+## Credits
 
-3. Compile the project using Maven
-    ```shell
-    mvn clean compile
-   ```
-
-4. Execute the Maven command to build an executable jar file with tests running
-    ```shell
-     mvn clean package -DskipTests=true 
-    ```
-
-An executable jar file like `ashv-<VERSION>-SNAPSHOT-jar-with-dependencies.jar` will be located at the relative path ashv/target
-
-[Return to Table of Contents](#table-of-contents)
-
-## Security
-Encryption and Container settings provide security for database passwords (go to Other tab -> Security block)
-
-### Encryption
-Encryption setting has AES and PBE options
-- **AES** - Advanced Encryption Standard (AES) with 256-bit key encryption, from the [Bouncy Castle provider](https://www.bouncycastle.org/), [FIPS](https://www.nist.gov/standardsgov/compliance-faqs-federal-information-processing-standards-fips#:~:text=are%20FIPS%20developed%3F-,What%20are%20Federal%20Information%20Processing%20Standards%20(FIPS)%3F,by%20the%20Secretary%20of%20Commerce.) compliant algorithm;
-- **PBE** - Password based encryption (PBE) in PBEWithMD5AndDES mode with secret key (computer name or hostname). This option is weak and deprecated, please use AES when possible;
-
-### Container
-It's the way to store your encrypted data
-- **DBAPI** - You sensitive data stored in Windows Data Protection API (DPAPI), maximum protected, Windows only;
-- **Registry** - OS System registry storage using java preferences API - weak, but better than **Configuration**;
-- **Configuration** - All data in local configuration file - weak, not recommended;
-
-### Recommendations 
-- use **AES** encryption and Windows Data Protection API (**DBAPI**) whenever possible;
-- do not use **PBE** copied configuration on another host, you need to change password with a new secret key (always do it for password leak prevention).
-
-[Return to Table of Contents](#table-of-contents)
-
-## Bugs and feature requests
-If you found a bug in the code or have a suggestion for improvement, [Please open an issue](https://github.com/akardapolov/ASH-Viewer/issues)  
-
-[Return to Table of Contents](#table-of-contents)
- 
-## Downloads
-- [Current version](https://github.com/akardapolov/ASH-Viewer/releases)
-- [Old release 3.5.1 on github.com](https://github.com/akardapolov/ASH-Viewer/releases/tag/v3.5.1)
-- [Mirror on sourceforge.net](https://sourceforge.net/projects/ashv/files/)   
-
-[Return to Table of Contents](#table-of-contents)
-
-## Based on
-- [JFreeChart by David Gilbert](http://www.jfree.org)
-- [E-Gantt Library by Keith Long](https://github.com/akardapolov/ASH-Viewer/tree/master/egantt)
-- [Berkeley DB Java Edition](http://www.oracle.com/database/berkeley-db)
-- [SwingLabs GUI toolkit by alexfromsun, kleopatra, rbair and other](https://en.wikipedia.org/wiki/SwingLabs)
-- [Dagger 2 by Google](https://dagger.dev/)
-- [AES cipher by Bouncy Castle](https://www.bouncycastle.org/)
-- [Windows DPAPI Wrapper by @peter-gergely-horvath](https://github.com/peter-gergely-horvath/windpapi4j)
-
-[Return to Table of Contents](#table-of-contents)
+- [ASH Viewer](https://github.com/akardapolov/ASH-Viewer) by Alexander Kardapolov, the base of this fork
+- [JFreeChart](https://www.jfree.org), [E-Gantt](https://github.com/akardapolov/ASH-Viewer/tree/master/egantt),
+  [Berkeley DB Java Edition](https://www.oracle.com/database/technologies/related/berkeleydb.html), SwingX, FlatLaf,
+  MigLayout, LGoodDatePicker, Dagger 2, Bouncy Castle FIPS, SnakeYAML
 
 ## License
-[![GPLv3 license](https://img.shields.io/badge/License-GPLv3-blue.svg)](http://perso.crans.org/besson/LICENSE.html)
 
-  Code released under the GNU General Public License v3.0
-
-[Return to Table of Contents](#table-of-contents)
+GNU General Public License v3.0 (see [LICENSE](LICENSE)), the license of the original ASH Viewer.
 
 ## Contact
-  Created by [@akardapolov](mailto:akardapolov@gmail.com) - feel free to contact me!
 
-[Return to Table of Contents](#table-of-contents)
+Marco Pontes · [marco.pontes.app@gmail.com](mailto:marco.pontes.app@gmail.com) ·
+[issues](https://github.com/mpontes-stack/MP-ASH-Viewer/issues)
