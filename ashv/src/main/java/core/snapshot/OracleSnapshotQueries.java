@@ -99,8 +99,14 @@ public final class OracleSnapshotQueries {
                 + "WHERE r.session_id = s.sid(+) "
                 + "ORDER BY elapsed_s DESC");
 
+        // size of the temp files and what the sessions use (same source as the list below); not dba_temp_free_space:
+        // with a CDB its size is multiplied by the number of containers (681 MB for a 227 MB file)
         q.put(TEMP_FREE,
-                "SELECT tablespace_name, tablespace_size, free_space FROM dba_temp_free_space");
+                "SELECT f.tablespace_name, f.bytes tablespace_size, f.bytes - NVL(u.used, 0) free_space "
+                + "FROM (SELECT tablespace_name, SUM(bytes) bytes FROM dba_temp_files GROUP BY tablespace_name) f "
+                + "LEFT JOIN (SELECT su.tablespace tablespace_name, SUM(su.blocks * t.block_size) used "
+                + "FROM v$tempseg_usage su, dba_tablespaces t WHERE su.tablespace = t.tablespace_name "
+                + "GROUP BY su.tablespace) u ON u.tablespace_name = f.tablespace_name");
 
         q.put(TEMP_TOP,
                 "SELECT * FROM ("
@@ -182,7 +188,7 @@ public final class OracleSnapshotQueries {
         v.put(ROLLBACK_SMON, "V$FAST_START_TRANSACTIONS");
         v.put(LONGOPS, "V$SESSION_LONGOPS, V$SESSION");
         v.put(JOBS, "DBA_SCHEDULER_RUNNING_JOBS, V$SESSION");
-        v.put(TEMP_FREE, "DBA_TEMP_FREE_SPACE");
+        v.put(TEMP_FREE, "DBA_TEMP_FILES, V$TEMPSEG_USAGE, DBA_TABLESPACES");
         v.put(TEMP_TOP, "V$TEMPSEG_USAGE, V$SESSION, DBA_TABLESPACES");
         v.put(UNDO_STAT, "V$UNDOSTAT, V$PARAMETER");
         v.put(FRA, "V$RECOVERY_FILE_DEST");
