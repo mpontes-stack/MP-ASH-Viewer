@@ -142,13 +142,25 @@ public class SqlDetail extends JFrame implements ActionListener {
 
         /** SQL plan*/
         JTabbedPane tabsSQLPlan = new JTabbedPane();
-        getFromRemoteAndStore.getSqlPlanHashValue(this.valueAtSqlId).stream().forEach(k -> {
-            String phvTabTitle = "PHV: " + k.getPlan_hash_value();
-            getFromRemoteAndStore.loadSqlPlanHashValueFromRemoteToLocalBDB(this.valueAtSqlId, k.getPlan_hash_value());
+        // one tab per plan (v$sql has a row per child cursor), with the tree and the DBMS_XPLAN text
+        getFromRemoteAndStore.getSqlPlanHashValue(this.valueAtSqlId).stream()
+                .map(k -> k.getPlan_hash_value()).distinct().forEach(phv -> {
+            String phvTabTitle = "PHV: " + phv;
+            getFromRemoteAndStore.loadSqlPlanHashValueFromRemoteToLocalBDB(this.valueAtSqlId, phv);
             ExplainPlanModel10g2 sqlPlanModel = (ExplainPlanModel10g2)
-                    getFromRemoteAndStore.getSqlPlanModelByPlanHashValue(new HashMap<>(), k.getPlan_hash_value(), this.valueAtSqlId);
+                    getFromRemoteAndStore.getSqlPlanModelByPlanHashValue(new HashMap<>(), phv, this.valueAtSqlId);
             JScrollPane scrollPane = new JScrollPane(createTreeTable(sqlPlanModel));
-            tabsSQLPlan.addTab(phvTabTitle, scrollPane);
+
+            XplanPanel xplanPanel = new XplanPanel(getFromRemoteAndStore, this.valueAtSqlId, phv);
+            JTabbedPane tabsPlanView = new JTabbedPane(JTabbedPane.BOTTOM);
+            tabsPlanView.addTab(config.Labels.getLabel("gui.xplan.tree"), scrollPane);
+            tabsPlanView.addTab("DBMS_XPLAN", xplanPanel);
+            tabsPlanView.addChangeListener(e -> {
+                if (tabsPlanView.getSelectedComponent() == xplanPanel) {
+                    xplanPanel.loadOnce();
+                }
+            });
+            tabsSQLPlan.addTab(phvTabTitle, tabsPlanView);
         });
 
         /** SQL ID detail -- in table mode **/
@@ -206,8 +218,7 @@ public class SqlDetail extends JFrame implements ActionListener {
     }
 
     /**
-     * Full scans stand out: TABLE / MAT_VIEW ACCESS FULL in bold orange (the warning color of the app), INDEX FULL
-     * SCAN and INDEX FAST FULL SCAN (the whole index is read) in orange
+     * Full table scans stand out: TABLE / MAT_VIEW ACCESS FULL in bold orange (the warning color of the app)
      */
     private static void highlightFullScans(JXTreeTable treeTable) {
         boolean dark = gui.util.Themes.isDark();
@@ -216,11 +227,6 @@ public class SqlDetail extends JFrame implements ActionListener {
             String op = String.valueOf(adapter.getValueAt(adapter.row, 0)).toUpperCase();
             return op.contains("ACCESS FULL") || (op.contains("ACCESS") && op.endsWith(" FULL"));
         };
-        org.jdesktop.swingx.decorator.HighlightPredicate indexFull = (renderer, adapter) -> {
-            String op = String.valueOf(adapter.getValueAt(adapter.row, 0)).toUpperCase();
-            return op.contains("INDEX") && op.contains("FULL SCAN");
-        };
-        treeTable.addHighlighter(new org.jdesktop.swingx.decorator.ColorHighlighter(indexFull, null, warning, null, warning));
         treeTable.addHighlighter(new org.jdesktop.swingx.decorator.ColorHighlighter(tableFull, null, warning, null, warning));
         treeTable.addHighlighter(new org.jdesktop.swingx.decorator.AbstractHighlighter(tableFull) {
             @Override

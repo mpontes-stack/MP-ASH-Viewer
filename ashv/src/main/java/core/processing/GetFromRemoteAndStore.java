@@ -954,6 +954,36 @@ public class GetFromRemoteAndStore {
         }
     }
 
+    /** Child cursors of the shared pool that use the plan (Oracle; empty when the cursor aged out or offline) */
+    public List<Long> getSqlChildNumbers(String sqlId, long planHashValue) throws SQLException {
+        List<Long> out = new ArrayList<>();
+        if (iProfile instanceof Postgres || remoteDBManager.getBasicDataSource() == null) {
+            return out;
+        }
+        QueryRunner run = new QueryRunner(remoteDBManager.getBasicDataSource());
+        return run.query("SELECT child_number FROM v$sql WHERE sql_id = ? AND plan_hash_value = ? ORDER BY child_number",
+                rs -> {
+                    while (rs.next()) {
+                        out.add(rs.getLong(1));
+                    }
+                    return out;
+                }, sqlId, planHashValue);
+    }
+
+    /** DBMS_XPLAN.DISPLAY_CURSOR text of a child cursor: reads v$sql_plan (+ v$sql_plan_statistics_all), no pack needed */
+    public String getXplan(String sqlId, long childNumber, String format) throws SQLException {
+        QueryRunner run = new QueryRunner(remoteDBManager.getBasicDataSource());
+        return run.query("SELECT plan_table_output FROM TABLE(DBMS_XPLAN.DISPLAY_CURSOR(?, ?, ?))",
+                rs -> {
+                    StringBuilder text = new StringBuilder();
+                    while (rs.next()) {
+                        String line = rs.getString(1);
+                        text.append(line == null ? "" : line).append('\n');
+                    }
+                    return text.toString();
+                }, sqlId, childNumber, format);
+    }
+
     public String setTrace10046(int sid, int serial, boolean bool) {
         String out = "";
         CallableStatement stmt = null;

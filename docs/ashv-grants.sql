@@ -15,6 +15,7 @@ GRANT SELECT ON sys.v_$mystat      TO ashv;
 GRANT SELECT ON sys.audit_actions  TO ashv;
 GRANT SELECT ON sys.v_$sql         TO ashv;   -- plan of the running SQL; SQL texts (every 10 min)
 GRANT SELECT ON sys.v_$sql_plan    TO ashv;   -- execution plans in the SQL details
+GRANT SELECT ON sys.v_$sql_plan_statistics_all TO ashv;   -- DBMS_XPLAN tab, format "Actual rows (ALLSTATS LAST)"
 
 -- Locks: object names (falls back to ALL_OBJECTS without it)
 GRANT SELECT ON sys.dba_objects    TO ashv;
