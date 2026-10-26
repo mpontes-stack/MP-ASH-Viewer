@@ -1,5 +1,7 @@
 package gui;
 
+import config.Labels;
+import gui.custom.AboutDialog;
 import gui.custom.AppLogo;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -63,10 +65,16 @@ public class MainWindow {
         this.mainStatusBar = mainStatusBar;
 
         this.mainToolBar.add(connectButton);
+        JButton about = new JButton(Labels.getLabel("gui.about.button"));
+        about.setToolTipText(Labels.getLabel("gui.about.tooltip"));
+        about.addActionListener(e -> AboutDialog.show(jFrame));
+        this.mainToolBar.add(about);
 
         // discreet logo at the right end of the toolbar
         JLabel logo = AppLogo.label(28, 1);
         logo.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 8));
+        // an HTML label may grow without limit and would take the room of the glue
+        logo.setMaximumSize(logo.getPreferredSize());
         this.mainToolBar.add(Box.createHorizontalGlue());
         this.mainToolBar.add(logo);
 
