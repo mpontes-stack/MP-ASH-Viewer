@@ -128,6 +128,13 @@ Scenarios: `cpu`, `io` (direct path reads), `plan_change` (same SQL_ID, new plan
 The script refuses to connect unless port 1521 is published by the container: production databases are reached
 through SSM tunnels on localhost ports.
 
+## Package to share
+
+`tools/dist/make-dist.sh` builds `ashv/target/dist/MP-ASH-Viewer-<version>.zip` (version from `AppLogo.VERSION`):
+the jar as `MP-ASH-Viewer.jar`, `bc-fips-1.0.2.4.jar`, `run.sh` / `run.bat` (from `tools/dist/files`: run in their
+folder, `ASHV_XMX` default 256m, reset connections left as "running: true" by an abrupt exit), README, FEATURES,
+images, grants script and LICENSE. No JDBC driver (Oracle license): `lib/` is for the user's driver.
+
 ## Commits
 
 Commit only when asked. Messages: `feature: ...` / `fix: ...` with a short body in English. Remotes: `origin` is
