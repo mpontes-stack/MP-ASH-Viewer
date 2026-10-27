@@ -22,7 +22,8 @@ MP-ASH-Viewer is a fork of [ASH Viewer](https://github.com/akardapolov/ASH-Viewe
 - **Locks**: blocking tree live and in the history, with the final blocker and the wait it caused
 - **Now: Sessions / Now: Resources**: a live view of the database: sessions, locks, long operations, jobs, PGA,
   TEMP, UNDO, tablespaces, FRA, Data Guard
-- **SQL text** of every SQL_ID kept in the local history, also after it leaves the shared pool
+- **SQL text** of every SQL_ID kept in the local history, also after it leaves the shared pool; execution plans as a tree and as `DBMS_XPLAN.DISPLAY_CURSOR` text (with actual rows when
+  available), full table scans highlighted
 - **Admin**: disk usage of the local histories, purge (manual or automatic), **backup and import** of a period to
   share with another analyst
 - English and Portuguese, light, dark and classic themes

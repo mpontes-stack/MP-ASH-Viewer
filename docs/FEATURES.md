@@ -51,6 +51,8 @@
 
 ## History
 
+![History](images/history.png)
+
 - The local history of the connection: choose a period (8 hours, 12 hours, a day, a week, a month or custom); the
   same Top sql & sessions, Raw data and Locks of any range.
 - A connection can be opened **Offline**: only its history, without connecting to the database (also used for
@@ -58,7 +60,7 @@
 
 ## Compare
 
-![Compare: execution plan change](images/compare-plan-change.png)
+![Compare](images/compare-summary.png)
 
 Two periods of the local history side by side: **Period A (baseline)** and **Period B (compared)**.
 
@@ -73,8 +75,6 @@ Two periods of the local history side by side: **Period A (baseline)** and **Per
 - **Plan (A → B)**: a SQL_ID that ran with a plan in B not seen in A is flagged (⚠ old plan → new plan).
 - **Executions A / B, Time/exec and Cause**: up because of more executions, slower executions or both.
 - Double click a row: both charts show that item only.
-
-![Compare: summary](images/compare-summary.png)
 
 ## Locks
 
@@ -93,6 +93,8 @@ tab is visible):
 
 - **Sessions**: by type and status, user sessions grouped by user, machine, program or module; locks; sessions
   rolling back and dead transactions recovered by SMON; long operations; running scheduler jobs.
+![Now: Resources](images/now-resources.png)
+
 - **Resources**: processes and limits, PGA (target, limit, top sessions), TEMP (use and top sessions), UNDO (last
   10 minutes), tablespaces (with the ones in warning / critical), FRA and Data Guard (when configured).
 - Each section says "no permission" when the user cannot read its view; inside a PDB the values are those the PDB
@@ -104,9 +106,18 @@ tab is visible):
 - Every 10 minutes, while collecting, the texts of the SQL_IDs collected are read from `v$sql` (batches of 100) and
   kept in the local history: the text is there later, after the SQL left the shared pool, and when only the history
   is open.
+- **SQL details** (double click a SQL_ID), tab "Sql text/plan": one tab per plan hash value, with
+  - **Tree**: the plan from `v$sql_plan`, kept in the local history; TABLE ACCESS FULL in bold orange;
+  - **DBMS_XPLAN**: the text of `DBMS_XPLAN.DISPLAY_CURSOR` as in SQL*Plus, by child cursor, in three formats:
+    *Typical + binds* (predicates, peeked binds, notes such as SQL profile / baseline / adaptive plan),
+    *Actual rows* (`ALLSTATS LAST`: A-Rows, A-Time and Buffers when the statement ran with the hint
+    `gather_plan_statistics` or `statistics_level = ALL`) and *Advanced* (outline); full table scans highlighted.
+    It reads the shared pool, only when the tab is opened; no Oracle pack needed.
 - The OracleSE profile also stores the plan hash value and SQL_EXEC_ID of every sample (used by Compare).
 
 ## Admin: disk, purge, backup and import
+
+![Admin](images/admin.png)
 
 - Every local history with its size, first and last sample.
 - **Delete older...** (samples and History aggregates older than N days, then the disk space is given back) and
@@ -120,6 +131,8 @@ tab is visible):
   same period.
 
 ## Languages, themes and About
+
+![Connection dialog](images/connection-dialog.png)
 
 - English (default) and Portuguese, chosen in the connection dialog; numbers and dates follow the language, CSV
   files follow the system (as Excel does).
@@ -147,6 +160,7 @@ tab is visible):
 | Every second (OracleSE) | active sessions; for the running SQL its plan hash value | `v$session`, `v$sesstat`, `v$mystat`, `audit_actions`, `v$sql` (by SQL_ID + child number) |
 | Every 10 min | texts of the SQL_IDs collected, batches of 100 | `v$sql` |
 | On demand | SQL text, plan, session and SQL details | `v$sql`, `v$sql_plan`, `v$session` |
+| DBMS_XPLAN tab | plan text of a child cursor | `DBMS_XPLAN.DISPLAY_CURSOR` (`v$sql_plan`, `v$sql_plan_statistics_all`) |
 | Locks | object names of the ids shown | `dba_objects` (or `all_objects`) |
 | Now tabs (refresh) | sessions, limits, PGA, TEMP, UNDO, tablespaces, FRA, Data Guard, long operations, jobs | see the grants in the [README](../README.md#database-privileges) |
 | ASH Report tab | ASH report text | `DBMS_WORKLOAD_REPOSITORY` (Diagnostics Pack) |
