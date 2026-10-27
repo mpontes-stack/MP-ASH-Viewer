@@ -1020,6 +1020,16 @@ public class ConnectToDbArea extends JDialog {
             }
             return c;
         }
+
+        /**
+         * A little wider than the text: the tree measures the names before the dialog is shown, and the text drawn
+         * on screen (antialiasing / scaling of the desktop) can be a few pixels wider, which cut the names with "..."
+         */
+        @Override
+        public Dimension getPreferredSize() {
+            Dimension d = super.getPreferredSize();
+            return d == null ? null : new Dimension(d.width + 12, d.height);
+        }
     }
 
     /**
