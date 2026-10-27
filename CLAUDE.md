@@ -130,10 +130,15 @@ through SSM tunnels on localhost ports.
 
 ## Package to share
 
-`tools/dist/make-dist.sh` builds `ashv/target/dist/MP-ASH-Viewer-<version>.zip` (version from `AppLogo.VERSION`):
-the jar as `MP-ASH-Viewer.jar`, `bc-fips-1.0.2.4.jar`, `run.sh` / `run.bat` (from `tools/dist/files`: run in their
-folder, `ASHV_XMX` default 256m, reset connections left as "running: true" by an abrupt exit), README, FEATURES,
-images, grants script and LICENSE. No JDBC driver (Oracle license): `lib/` is for the user's driver.
+`tools/dist/make-dist.sh` builds `ashv/target/dist/MP-ASH-Viewer-v<version>.zip` (version from `AppLogo.VERSION`):
+`mp_ash_viewer_v<version>.jar`, `bc-fips-1.0.2.4.jar`, `exec_ashv.sh` / `exec_ashv.bat` (from `tools/dist/files`,
+`@VERSION@` replaced: run in their folder, no absolute paths, `ASHV_XMX` default 256m, check bc-fips, reset
+connections left as "running: true" by an abrupt exit), installation `README.txt`, grants script and LICENSE. No JDBC
+driver (Oracle license): `lib/` is for the user's driver.
+
+Every new version gets a GitHub release with that zip: bump `AppLogo.VERSION`, write `tools/dist/notes/v<version>.md`,
+commit, tag `v<version>` and push it to `pessoal`, then `tools/dist/make-dist.sh --release`. The repo is private:
+only collaborators can download the release.
 
 ## Commits
 

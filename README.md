@@ -41,17 +41,16 @@ Oracle RAC: open one connection (one app) per instance.
 
 ## Quick start
 
-1. Download the latest release from the [Releases page](https://github.com/mpontes-stack/MP-ASH-Viewer/releases):
-   the application jar and `bc-fips-1.0.2.4.jar`, kept in the same folder.
-2. Download the JDBC driver: [Oracle (ojdbc8.jar or later)](https://www.oracle.com/database/technologies/appdev/jdbc-downloads.html)
+1. Download `MP-ASH-Viewer-v<version>.zip` from the [Releases page](https://github.com/mpontes-stack/MP-ASH-Viewer/releases)
+   and unzip it: the app jar, `bc-fips-1.0.2.4.jar` (kept in the same folder), start scripts and an installation
+   `README.txt`.
+2. Java 11 or later with graphics (Ubuntu: `openjdk-21-jre`, not the `-headless` package).
+3. Put the JDBC driver in `lib/`: [Oracle (ojdbc8.jar or later)](https://www.oracle.com/database/technologies/appdev/jdbc-downloads.html)
    or [PostgreSQL](https://jdbc.postgresql.org/download.html).
-3. Run it with Java 11 or later:
-   ```bash
-   java -Xmx256m -jar ashv-4.0-SNAPSHOT-jar-with-dependencies.jar
-   ```
-4. In the connection dialog, create a connection: URL `jdbc:oracle:thin:@host:port/service` (or `:SID`), user,
+4. Start it with `./exec_ashv.sh` (Linux / macOS) or `exec_ashv.bat` (Windows); memory: `ASHV_XMX` (default 256m).
+5. In the connection dialog, create a connection: URL `jdbc:oracle:thin:@host:port/service` (or `:SID`), user,
    password, the JDBC driver jar and the profile **OracleSE** (samples `v$session`, no license needed).
-5. Click **Connect**. The history is kept in `database/` next to the jar.
+6. Click **Connect**. The history is kept in `database/` next to the jar.
 
 ## Database privileges
 
