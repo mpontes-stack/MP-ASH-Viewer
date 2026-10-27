@@ -43,5 +43,12 @@ if [ "${1:-}" = "--release" ]; then
     git ls-remote --exit-code --tags pessoal "$TAG" >/dev/null || { echo "tag $TAG is not on the remote pessoal"; exit 1; }
     [ -f "$NOTES" ] || { echo "release notes missing: $NOTES"; exit 1; }
     REPO=$(git remote get-url pessoal | sed -E 's#.*github.com[:/]##; s#\.git$##')
-    gh release create "$TAG" "$ZIP" -R "$REPO" --title "MP-ASH-Viewer $VERSION" --notes-file "$NOTES"
+    # the release first, then the zip (a 30 MB upload may time out: retried)
+    gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 \
+        || gh release create "$TAG" -R "$REPO" --title "MP-ASH-Viewer $VERSION" --notes-file "$NOTES"
+    for i in 1 2 3; do
+        gh release upload "$TAG" "$ZIP" -R "$REPO" --clobber && break
+        echo "upload failed ($i), trying again"
+    done
+    gh release view "$TAG" -R "$REPO" --json url,assets -q '.url, (.assets[] | .name + " " + .state)'
 fi
