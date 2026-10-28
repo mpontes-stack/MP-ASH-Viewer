@@ -326,6 +326,7 @@ public class ConnectToDbArea extends JDialog {
                 setProfileMessageLblVisible((String) arg.getItem());
             }
         });
+        profileBox.setSelectedItem(ConstantManager.Profile.OracleSE.name());
 
         configMainJPanel.add(profileNameLbl,   "skip");
         configMainJPanel.add(profileBox,   "span, growx");
@@ -743,6 +744,8 @@ public class ConnectToDbArea extends JDialog {
         jarTF.setText("");
         rawDataDaysRetainTF.setText("");
         olapDataDaysRetainTF.setText("");
+        // OracleSE by default: OracleEE needs the Diagnostics Pack (v$active_session_history)
+        profileBox.setSelectedItem(ConstantManager.Profile.OracleSE.name());
 
         initialLoadAllRButton.setSelected(true);
         initialLoadLastRButton.setSelected(false);
