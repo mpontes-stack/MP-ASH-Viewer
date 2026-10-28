@@ -9,6 +9,10 @@ of two periods.
 MP-ASH-Viewer is a fork of [ASH Viewer](https://github.com/akardapolov/ASH-Viewer) by Alexander Kardapolov
 (discontinued), extended and maintained by Marco Pontes.
 
+A special thanks to Alexander Kardapolov: I used ASH Viewer for years, and it helped me a lot to diagnose problems
+on the spot in Oracle Standard Edition databases, where there is no Diagnostics or Tuning Pack, no AWR and no ASH
+report to count on. This fork exists to keep that tool alive and to give something back to it.
+
 ![Top Activity](docs/images/top-activity.png)
 
 ## Main features
