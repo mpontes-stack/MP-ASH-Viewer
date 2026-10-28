@@ -80,6 +80,22 @@ public class CategoryTableXYDatasetRDA extends CategoryTableXYDataset implements
         }
     }
 
+    /** Removes the points older than startWindow (the oldest come first) */
+    public void deleteValuesBefore(double startWindow){
+        while (getItemCount() > 0) {
+            try {
+                Double xValue = (Double) getX(0, 0);
+                if (xValue >= startWindow) {
+                    break;
+                }
+                seriesNames.forEach((k,v)-> remove(xValue,v));
+            } catch (Exception e){
+                log.error(e.getMessage());
+                break;
+            }
+        }
+    }
+
     public void deleteValuesFromDataset(long startWindow){
         for (int i=0;i<getItemCount();i++) {
             try {

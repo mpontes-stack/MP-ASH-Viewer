@@ -222,6 +222,8 @@ public class GetFromRemoteAndStore {
             if (sampleTimeG < currServerTime) {
                 max = currServerTime;
             }
+            // after a long gap only the last hour is drawn (not one empty point per interval of the gap)
+            min = Math.max(min, max - ConstantManager.CURRENT_WINDOW);
         }
 
         // Main
@@ -322,6 +324,10 @@ public class GetFromRemoteAndStore {
 
         chartDatasetManager.getMainNameChartDataset().getDatasetRDA().deleteValuesFromDatasetDetail(ConstantManager.MAX_POINT_PER_GRAPH);
         chartDatasetManager.getNameChartDatasetDetail().forEach(e -> e.getDatasetRDA().deleteValuesFromDatasetDetail(ConstantManager.MAX_POINT_PER_GRAPH));
+        // the last hour only: after a gap (connection lost, then Reconnect) the old points would stretch the time axis
+        final double windowStart = max - ConstantManager.CURRENT_WINDOW;
+        chartDatasetManager.getMainNameChartDataset().getDatasetRDA().deleteValuesBefore(windowStart);
+        chartDatasetManager.getNameChartDatasetDetail().forEach(e -> e.getDatasetRDA().deleteValuesBefore(windowStart));
 
         if (mainChartListener != null) {
             mainChartListener.accept(false);
