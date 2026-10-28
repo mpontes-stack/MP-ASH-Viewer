@@ -33,6 +33,14 @@ public final class OracleSnapshotQueries {
     public static final String FRA_USAGE = "fraUsage";
     public static final String DG_STANDBY = "dgStandby";
     public static final String DG_DESTINATIONS = "dgDestinations";
+    // "Now: OS": counters of the server (whole host, also inside a PDB) and of this database; deltas between refreshes
+    public static final String OS_STAT = "osStat";
+    public static final String OS_TIME_MODEL = "osTimeModel";
+    public static final String OS_MEMORY = "osMemory";
+    public static final String OS_IO = "osIo";
+    public static final String OS_CONTAINER = "osContainer";
+    public static final String OS_PLATFORM = "osPlatform";
+    public static final String OS_PDB_CPU = "osPdbCpu";
 
     private OracleSnapshotQueries() {}
 
@@ -160,6 +168,32 @@ public final class OracleSnapshotQueries {
                 + "ORDER BY p.pga_alloc_mem DESC) "
                 + "WHERE ROWNUM <= 20");
 
+        q.put(OS_STAT, "SELECT stat_name, value FROM v$osstat");
+
+        // inside a PDB: the PDB only; in the root of a CDB: all the containers; otherwise the instance
+        q.put(OS_TIME_MODEL,
+                "SELECT stat_name, value FROM v$sys_time_model WHERE stat_name IN ('DB CPU', 'background cpu time')");
+
+        q.put(OS_MEMORY,
+                "SELECT (SELECT bytes FROM v$sgainfo WHERE name = 'Maximum SGA Size'), "
+                + "(SELECT value FROM v$pgastat WHERE name = 'total PGA allocated') FROM dual");
+
+        q.put(OS_IO,
+                "SELECT function_name, small_read_megabytes + large_read_megabytes, "
+                + "small_write_megabytes + large_write_megabytes, "
+                + "small_read_reqs + large_read_reqs + small_write_reqs + large_write_reqs, "
+                + "number_of_waits, wait_time FROM v$iostat_function");
+
+        // 0: not a CDB, 1: root, > 1: PDB (fails before 12c: not a CDB)
+        q.put(OS_CONTAINER, "SELECT SYS_CONTEXT('USERENV', 'CON_ID'), SYS_CONTEXT('USERENV', 'CON_NAME') FROM dual");
+
+        q.put(OS_PLATFORM, "SELECT platform_name FROM v$database");
+
+        // CPU of each container, shown in the root only (inside a PDB: the PDB itself)
+        q.put(OS_PDB_CPU,
+                "SELECT c.name, t.stat_name, t.value FROM v$con_sys_time_model t, v$containers c "
+                + "WHERE t.con_id = c.con_id AND t.stat_name IN ('DB CPU', 'background cpu time')");
+
         q.put(TABLESPACES,
                 "SELECT m.tablespace_name, t.contents, "
                 + "ROUND(m.used_space * t.block_size / 1073741824, 2) used_gb, "
@@ -195,6 +229,13 @@ public final class OracleSnapshotQueries {
         v.put(FRA_USAGE, "V$RECOVERY_AREA_USAGE");
         v.put(DG_STANDBY, "V$DATAGUARD_STATS");
         v.put(DG_DESTINATIONS, "V$ARCHIVE_DEST_STATUS");
+        v.put(OS_STAT, "V$OSSTAT");
+        v.put(OS_TIME_MODEL, "V$SYS_TIME_MODEL");
+        v.put(OS_MEMORY, "V$SGAINFO, V$PGASTAT");
+        v.put(OS_IO, "V$IOSTAT_FUNCTION");
+        v.put(OS_CONTAINER, "SYS_CONTEXT");
+        v.put(OS_PLATFORM, "V$DATABASE");
+        v.put(OS_PDB_CPU, "V$CON_SYS_TIME_MODEL, V$CONTAINERS");
         return v;
     }
 }

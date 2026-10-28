@@ -43,7 +43,7 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
   `MP-ASH-Viewer/retain`; `HistoryBackup`: export / import of a period as a .zip that holds a ready Berkeley DB;
   `TaskProgress`: progress bar with cancel). `gui/lock`: lock tree. `gui/util/Themes`: light / dark / classic.
 - Tabs: `MonitorDbPanel` adds them in this order: Top Activity, History, Compare, Now: Sessions, Now: Resources,
-  Admin (offline: History, Compare, Admin). Every tab and sub tab has a drawn icon (`gui/custom/TabIcon`).
+  Now: OS (`SnapshotPanel.Page.OS` + `OsView`: deltas of `v$osstat` between refreshes), Admin (offline: History, Compare, Admin). Every tab and sub tab has a drawn icon (`gui/custom/TabIcon`).
 - Look: `gui/util/Ui.title` for blue section titles and `Ui.highlight` for bars apart from the background (filter
   bar); use them in new screens instead of new colors.
 - UI texts through `config.Labels`: `messages.properties` in **English** (the default, also used for any missing

@@ -9,6 +9,7 @@
 - [Compare](#compare)
 - [Locks](#locks)
 - [Now: Sessions and Now: Resources](#now-sessions-and-now-resources)
+- [Now: OS](#now-os)
 - [SQL text and execution plans](#sql-text-and-execution-plans)
 - [Admin: disk, purge, backup and import](#admin-disk-purge-backup-and-import)
 - [Languages, themes and About](#languages-themes-and-about)
@@ -100,6 +101,25 @@ tab is visible):
 - Each section says "no permission" when the user cannot read its view; inside a PDB the values are those the PDB
   sees.
 
+## Now: OS
+
+CPU, load and memory of the **server** and the I/O of the database, from views that also exist in Standard Edition
+(no pack) and inside a PDB. Same refresh as the other Now tabs; every value is the difference between the last two
+refreshes (the first one reads twice, 3 s apart).
+
+- **Server CPU** (`v$osstat`): busy % (user, sys, I/O wait), CPUs / cores / sockets, load against the cores, and the
+  CPU of **this database** (`v$sys_time_model`: DB CPU + background CPU) against the CPU busy on the server: is the
+  high CPU from Oracle or from something else? Waiting for Resource Manager shows when a resource plan is limiting
+  the database.
+- **Server memory**: total RAM, free, OS cache, free swap, paging (swap in / out), Oracle SGA and PGA.
+- **One chart** with user, sys, I/O wait, idle and load per core, one point per refresh (the last 60).
+- **Database I/O by function** (`v$iostat_function`): read / write MB/s, I/O per second, average latency and share of
+  Buffer Cache Reads, Direct Reads, LGWR, DBWR, RMAN...
+- What "this database" means depends on the connection: the instance (non-CDB), **the PDB only** (connected to a
+  PDB) or **the whole CDB** (connected to the root, with a table of the CPU of each container; a common user needs
+  `CONTAINER_DATA=ALL` to see the PDBs). CPU, load and memory are always of the whole server.
+- Not available from the database: file systems, other OS processes and network cards.
+
 ## SQL text and execution plans
 
 - The tooltip of a SQL_ID shows its text; right click → "Copy SQL text".
@@ -162,6 +182,7 @@ tab is visible):
 | On demand | SQL text, plan, session and SQL details | `v$sql`, `v$sql_plan`, `v$session` |
 | DBMS_XPLAN tab | plan text of a child cursor | `DBMS_XPLAN.DISPLAY_CURSOR` (`v$sql_plan`, `v$sql_plan_statistics_all`) |
 | Locks | object names of the ids shown | `dba_objects` (or `all_objects`) |
+| Now: OS (refresh) | CPU, load, memory and I/O of the server, CPU by container | `v$osstat`, `v$sys_time_model`, `v$sgainfo`, `v$pgastat`, `v$iostat_function`, `v$con_sys_time_model` + `v$containers` (CDB root) |
 | Now tabs (refresh) | sessions, limits, PGA, TEMP, UNDO, tablespaces, FRA, Data Guard, long operations, jobs | see the grants in the [README](../README.md#database-privileges) |
 | ASH Report tab | ASH report text | `DBMS_WORKLOAD_REPOSITORY` (Diagnostics Pack) |
 | OracleEE profile | samples | `v$active_session_history` (Diagnostics Pack) |

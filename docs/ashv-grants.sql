@@ -42,5 +42,14 @@ GRANT SELECT ON sys.dba_tablespace_usage_metrics    TO ashv;
 GRANT SELECT ON sys.dba_temp_files                  TO ashv;
 GRANT SELECT ON sys.dba_scheduler_running_jobs      TO ashv;
 
+-- Now: OS (CPU, load, memory and I/O of the server; CPU of this database / of each container)
+GRANT SELECT ON sys.v_$osstat                       TO ashv;
+GRANT SELECT ON sys.v_$sys_time_model               TO ashv;
+GRANT SELECT ON sys.v_$sgainfo                      TO ashv;
+GRANT SELECT ON sys.v_$iostat_function              TO ashv;
+-- CDB root with a common user (C##ASHV): CPU by container also needs
+-- GRANT SELECT ON sys.v_$con_sys_time_model TO c##ashv;  GRANT SELECT ON sys.v_$containers TO c##ashv;
+-- and, to see the rows of the PDBs in the V$ views:  ALTER USER c##ashv SET CONTAINER_DATA=ALL CONTAINER=CURRENT;
+
 -- Optional: "Trace 10046" in the session details
 -- GRANT EXECUTE ON sys.dbms_monitor TO ashv;

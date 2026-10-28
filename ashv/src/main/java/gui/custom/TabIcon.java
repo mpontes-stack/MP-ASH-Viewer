@@ -18,7 +18,7 @@ import javax.swing.Icon;
  * Small icons of the main tabs, drawn (sharp at any scale) with light / dark theme colors
  */
 public class TabIcon implements Icon {
-    public enum Type {ACTIVITY, HISTORY, COMPARE, SESSIONS, RESOURCES, ADMIN, TOP_SQL, RAW, REPORT, LOCKS, DETAIL}
+    public enum Type {ACTIVITY, HISTORY, COMPARE, SESSIONS, RESOURCES, ADMIN, TOP_SQL, RAW, REPORT, LOCKS, DETAIL, OS}
 
     private static final int SIZE = 16;
 
@@ -98,6 +98,21 @@ public class TabIcon implements Icon {
                     g2.draw(new Line2D.Double(1.5, 9.5, 14.5, 9.5));
                     g2.draw(new Line2D.Double(8, 9.5, 11.5, 5));
                     g2.fill(new Ellipse2D.Double(6.5, 8, 3, 3));
+                    break;
+                }
+                case OS: {
+                    // processor chip with pins
+                    g2.setColor(fill);
+                    g2.fill(new Rectangle2D.Double(4, 4, 8, 8));
+                    g2.setColor(color);
+                    g2.draw(new Rectangle2D.Double(4, 4, 8, 8));
+                    g2.draw(new Rectangle2D.Double(6.5, 6.5, 3, 3));
+                    for (double p = 6; p <= 10; p += 2) {
+                        g2.draw(new Line2D.Double(p, 1.5, p, 4));
+                        g2.draw(new Line2D.Double(p, 12, p, 14.5));
+                        g2.draw(new Line2D.Double(1.5, p, 4, p));
+                        g2.draw(new Line2D.Double(12, p, 14.5, p));
+                    }
                     break;
                 }
                 case ADMIN: {
@@ -208,6 +223,8 @@ public class TabIcon implements Icon {
                 return dark ? new Color(230, 190, 70) : new Color(170, 120, 0);
             case DETAIL:
                 return dark ? new Color(185, 140, 240) : new Color(120, 70, 190);
+            case OS:
+                return dark ? new Color(110, 190, 235) : new Color(20, 115, 170);
             default:
                 return dark ? new Color(80, 200, 200) : new Color(0, 130, 140);
         }

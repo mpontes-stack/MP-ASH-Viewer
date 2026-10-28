@@ -174,6 +174,8 @@ public class MonitorDbPanel {
                 new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.SESSIONS));
         mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.resources"), new TabIcon(TabIcon.Type.RESOURCES),
                 new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.RESOURCES));
+        mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.os"), new TabIcon(TabIcon.Type.OS),
+                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.OS));
         addAdmin();
         SqlTextCapture.start();
     }

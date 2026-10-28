@@ -46,8 +46,11 @@ import remote.RemoteDBManager;
  */
 @Slf4j
 public class SnapshotPanel extends JPanel {
-    /** Sessions: who is doing what (locks, rollback, long operations, jobs); resources: is something running out */
-    public enum Page {SESSIONS, RESOURCES}
+    /**
+     * Sessions: who is doing what (locks, rollback, long operations, jobs); resources: is something running out;
+     * OS: CPU, memory and I/O of the server
+     */
+    public enum Page {SESSIONS, RESOURCES, OS}
 
     private static final List<String> SESSIONS_QUERIES = java.util.Arrays.asList(
             OracleSnapshotQueries.HEADER, OracleSnapshotQueries.SESSIONS_BY_TYPE, OracleSnapshotQueries.SESSIONS_USER,
@@ -59,6 +62,12 @@ public class SnapshotPanel extends JPanel {
             OracleSnapshotQueries.TEMP_TOP, OracleSnapshotQueries.UNDO_STAT, OracleSnapshotQueries.FRA,
             OracleSnapshotQueries.FRA_USAGE, OracleSnapshotQueries.DG_STANDBY, OracleSnapshotQueries.DG_DESTINATIONS,
             OracleSnapshotQueries.TABLESPACES);
+    private static final List<String> OS_QUERIES = java.util.Arrays.asList(
+            OracleSnapshotQueries.HEADER, OracleSnapshotQueries.OS_STAT, OracleSnapshotQueries.OS_TIME_MODEL,
+            OracleSnapshotQueries.OS_MEMORY, OracleSnapshotQueries.OS_IO, OracleSnapshotQueries.OS_CONTAINER,
+            OracleSnapshotQueries.OS_PLATFORM, OracleSnapshotQueries.OS_PDB_CPU);
+    /** The OS counters are totals since the start of the instance: the first refresh reads twice, this far apart */
+    private static final long OS_FIRST_INTERVAL_MS = 3000;
 
     static final double WARN_PCT = 85;
     static final double CRITICAL_PCT = 95;
@@ -139,6 +148,8 @@ public class SnapshotPanel extends JPanel {
 
     private final List<JXTable> tables = new ArrayList<>();
     private List<Object[]> sessionsUserRows = Collections.emptyList();
+
+    private OsView osView;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Timer timer;
@@ -225,6 +236,9 @@ public class SnapshotPanel extends JPanel {
                     collapsible(table(smonModel, 4, true, true))), "span 2, wrap");
             content.add(section(Labels.getLabel("gui.snapshot.longops"), longopsSummary,
                     collapsible(table(longopsModel, 6, true, true))), "span 2, wrap");
+        } else if (page == Page.OS) {
+            osView = new OsView(this);
+            osView.build(content);
         } else {
             JScrollPane limitsTable = table(limitsModel, 4, true);
             javax.swing.table.DefaultTableCellRenderer right = new javax.swing.table.DefaultTableCellRenderer();
@@ -273,23 +287,34 @@ public class SnapshotPanel extends JPanel {
         statusLbl.setText(Labels.getLabel("gui.snapshot.refreshing"));
         long start = System.currentTimeMillis();
 
-        new SwingWorker<Map<String, SnapshotService.Result>, Void>() {
+        boolean firstOsReading = page == Page.OS && !osView.hasReading();
+        new SwingWorker<List<Map<String, SnapshotService.Result>>, Void>() {
             @Override
-            protected Map<String, SnapshotService.Result> doInBackground() {
-                List<String> keys = page == Page.SESSIONS ? SESSIONS_QUERIES : RESOURCES_QUERIES;
+            protected List<Map<String, SnapshotService.Result>> doInBackground() throws Exception {
+                List<String> keys = page == Page.SESSIONS ? SESSIONS_QUERIES : page == Page.RESOURCES ? RESOURCES_QUERIES : OS_QUERIES;
                 Map<String, String> queries = new java.util.LinkedHashMap<>();
                 OracleSnapshotQueries.queries().forEach((k, q) -> {
                     if (keys.contains(k)) {
                         queries.put(k, q);
                     }
                 });
-                return service.run(queries, OracleSnapshotQueries.views());
+                List<Map<String, SnapshotService.Result>> readings = new ArrayList<>();
+                readings.add(service.run(queries, OracleSnapshotQueries.views()));
+                if (firstOsReading) {
+                    Thread.sleep(OS_FIRST_INTERVAL_MS);
+                    readings.add(service.run(queries, OracleSnapshotQueries.views()));
+                }
+                return readings;
             }
 
             @Override
             protected void done() {
                 try {
-                    render(get());
+                    List<Map<String, SnapshotService.Result>> readings = get();
+                    if (page == Page.OS) {
+                        readings.forEach(osView::add);
+                    }
+                    render(readings.get(readings.size() - 1));
                     statusLbl.setText(Labels.getLabel("gui.snapshot.updated") + " "
                             + new SimpleDateFormat("HH:mm:ss").format(new Date())
                             + " (" + (System.currentTimeMillis() - start) + " ms)");
@@ -313,6 +338,8 @@ public class SnapshotPanel extends JPanel {
             renderRollback(r.get(OracleSnapshotQueries.ROLLBACK_SESSIONS), r.get(OracleSnapshotQueries.ROLLBACK_SMON));
             renderLongops(r.get(OracleSnapshotQueries.LONGOPS));
             renderJobs(r.get(OracleSnapshotQueries.JOBS));
+        } else if (page == Page.OS) {
+            osView.render(r);
         } else {
             renderLimits(r.get(OracleSnapshotQueries.LIMITS));
             renderTemp(r.get(OracleSnapshotQueries.TEMP_FREE), r.get(OracleSnapshotQueries.TEMP_TOP));
@@ -360,7 +387,7 @@ public class SnapshotPanel extends JPanel {
     private final List<TableBox> tableBoxes = new ArrayList<>();
 
     /** Mark a table to be hidden when it has no rows (the summary line says "none") */
-    private JScrollPane collapsible(JScrollPane scroll) {
+    JScrollPane collapsible(JScrollPane scroll) {
         tableBoxes.stream().filter(b -> b.scroll == scroll).forEach(b -> b.collapsible = true);
         scroll.setVisible(false);
         return scroll;
@@ -896,7 +923,7 @@ public class SnapshotPanel extends JPanel {
 
     /* ---------- components ---------- */
 
-    private JPanel section(String title, JLabel summary, JComponent... body) {
+    JPanel section(String title, JLabel summary, JComponent... body) {
         JPanel panel = new JPanel(new MigLayout("fillx, ins 4, hidemode 3", "[grow, fill]", ""));
         JLabel titleLbl = new JLabel(title);
         titleLbl.setFont(titleLbl.getFont().deriveFont(Font.BOLD));
@@ -913,6 +940,14 @@ public class SnapshotPanel extends JPanel {
 
     private JScrollPane table(DefaultTableModel model, int visibleRows, boolean hasPctColumn) {
         return table(model, visibleRows, hasPctColumn, false);
+    }
+
+    /** Table whose last column is a share (always the neutral blue: a big share is not an alert) */
+    JScrollPane shareTable(DefaultTableModel model, int visibleRows) {
+        JScrollPane scroll = table(model, visibleRows, false, false);
+        ((JXTable) scroll.getViewport().getView()).getColumnExt(model.getColumnCount() - 1)
+                .setCellRenderer(new PercentBarRenderer(false, true));
+        return scroll;
     }
 
     /**
@@ -934,7 +969,7 @@ public class SnapshotPanel extends JPanel {
         return scroll;
     }
 
-    private static DefaultTableModel model(String... labelKeys) {
+    static DefaultTableModel model(String... labelKeys) {
         DefaultTableModel m = new ReadOnlyModel();
         Object[] cols = new Object[labelKeys.length];
         for (int i = 0; i < labelKeys.length; i++) {
@@ -964,12 +999,18 @@ public class SnapshotPanel extends JPanel {
      */
     private static class PercentBarRenderer extends JComponent implements TableCellRenderer {
         private final boolean isProgress;
+        private final boolean isShare;
         private Double pct;
         private boolean selected;
         private JTable table;
 
         PercentBarRenderer(boolean isProgress) {
+            this(isProgress, false);
+        }
+
+        PercentBarRenderer(boolean isProgress, boolean isShare) {
             this.isProgress = isProgress;
+            this.isShare = isShare;
         }
 
         @Override
@@ -996,7 +1037,7 @@ public class SnapshotPanel extends JPanel {
             int barWidth = (int) Math.round(barArea * Math.min(100, Math.max(0, pct)) / 100.0);
             g.setColor(new Color(128, 128, 128, 40));
             g.fillRoundRect(2, 4, barArea, getHeight() - 8, 4, 4);
-            g.setColor(isProgress ? progressColor()
+            g.setColor(isProgress ? progressColor() : isShare ? okColor()
                     : pct >= CRITICAL_PCT ? criticalColor() : pct >= WARN_PCT ? warnColor() : okColor());
             g.fillRoundRect(2, 4, barWidth, getHeight() - 8, 4, 4);
 
@@ -1013,12 +1054,12 @@ public class SnapshotPanel extends JPanel {
     static Color warnColor() { return new Color(230, 165, 40); }
     static Color criticalColor() { return new Color(220, 70, 60); }
 
-    private static Color secondaryColor() {
+    static Color secondaryColor() {
         Color c = UIManager.getColor("Label.disabledForeground");
         return c != null ? c : Color.GRAY;
     }
 
-    private static String hex(Color c) {
+    static String hex(Color c) {
         return String.format("#%02x%02x%02x", c.getRed(), c.getGreen(), c.getBlue());
     }
 
@@ -1032,7 +1073,7 @@ public class SnapshotPanel extends JPanel {
         return "<b>" + text + "</b>";
     }
 
-    private String errorHtml(SnapshotService.Result r) {
+    String errorHtml(SnapshotService.Result r) {
         String msg = r == null ? "" : r.isOk() ? Labels.getLabel("gui.snapshot.no.rows") : r.error;
         return "<html><font color='" + hex(warnColor()) + "'>⚠ " + esc(msg) + "</font></html>";
     }
@@ -1071,7 +1112,7 @@ public class SnapshotPanel extends JPanel {
         return o == null ? "" : String.valueOf(o);
     }
 
-    private static String esc(Object o) {
+    static String esc(Object o) {
         return str(o).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }
