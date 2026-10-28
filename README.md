@@ -30,7 +30,8 @@ MP-ASH-Viewer is a fork of [ASH Viewer](https://github.com/akardapolov/ASH-Viewe
   share with another analyst
 - English and Portuguese, light, dark and classic themes
 
-More details, screenshots and the limits of the sampling: [docs/FEATURES.md](docs/FEATURES.md).
+More details, screenshots and the limits of the sampling: [docs/FEATURES.md](docs/FEATURES.md). Changes in each
+version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Supported databases
 

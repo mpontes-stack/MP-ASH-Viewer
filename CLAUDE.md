@@ -136,7 +136,7 @@ through SSM tunnels on localhost ports.
 connections left as "running: true" by an abrupt exit), installation `README.txt`, grants script and LICENSE. No JDBC
 driver (Oracle license): `lib/` is for the user's driver.
 
-Every new version gets a GitHub release with that zip: bump `AppLogo.VERSION`, write `tools/dist/notes/v<version>.md`,
+Every new version gets a GitHub release with that zip: bump `AppLogo.VERSION`, add the version to `CHANGELOG.md`, write `tools/dist/notes/v<version>.md`,
 commit, tag `v<version>` and push it to `pessoal`, then `tools/dist/make-dist.sh --release`. The repo is private:
 only collaborators can download the release.
 
