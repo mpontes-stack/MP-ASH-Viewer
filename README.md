@@ -27,7 +27,7 @@ report to count on. This fork exists to keep that tool alive and to give somethi
 - **Now: Sessions / Now: Resources**: a live view of the database: sessions, locks, long operations, jobs, PGA,
   TEMP, UNDO, tablespaces, FRA, Data Guard
 - **Now: OS**: CPU, load and memory of the server, how much of the CPU is this database (or each PDB), I/O by
-  function with latency
+  function with latency, and a chart of the last hour that keeps updating while the tab is hidden
 - **SQL text** of every SQL_ID kept in the local history, also after it leaves the shared pool; execution plans as a tree and as `DBMS_XPLAN.DISPLAY_CURSOR` text (with actual rows when
   available), full table scans highlighted
 - **Admin**: disk usage of the local histories, purge (manual or automatic), **backup and import** of a period to

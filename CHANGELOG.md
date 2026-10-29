@@ -2,6 +2,14 @@
 
 Changes in each version of MP-ASH-Viewer. Downloads: [Releases](https://github.com/mpontes-stack/MP-ASH-Viewer/releases).
 
+## 1.3.0 (2026-10-29)
+
+New:
+
+- **Now: OS**: the chart keeps its history while the tab is hidden. With the automatic refresh on, only `v$osstat`
+  is read in the background (one small query per interval), so the chart already has the points since the connection
+  when the tab is opened. The chart shows the last hour, whatever the refresh interval.
+
 ## 1.2.0 (2026-10-29)
 
 PostgreSQL reviewed (tested on PostgreSQL on AWS RDS):
