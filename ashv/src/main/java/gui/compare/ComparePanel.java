@@ -229,7 +229,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         waitClassPanel.add(waitClassContent, BorderLayout.CENTER);
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, waitClassPanel, itemsPanel);
         split.setDividerLocation(170);
-        split.setResizeWeight(0.2);
+        split.setResizeWeight(0); // extra height goes to the "Compare by" table
         split.setOneTouchExpandable(true);
 
         JPanel bottom = new JPanel(new BorderLayout());
@@ -243,8 +243,9 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         outer.setResizeWeight(0);
         outer.setOneTouchExpandable(true);
         bottom.setMinimumSize(new Dimension(0, 60));
-        ScrollContent content = new ScrollContent(outer);
+        ScrollContent content = new ScrollContent(outer, results, split);
         outer.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> content.revalidate());
+        split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> content.revalidate());
         JScrollPane scroll = new JScrollPane(content);
         scroll.setBorder(null);
         scroll.getVerticalScrollBar().setUnitIncrement(24);
@@ -932,23 +933,29 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     }
 
     /**
-     * Whole tab in a scroll pane: as wide as the window, at least as tall as the charts (divider) plus
-     * {@link #MIN_TABLES_HEIGHT} for the tables, taller when the window is
+     * Whole tab in a scroll pane: as wide as the window, at least as tall as the charts (outer divider), the results
+     * text, the wait class table (inner divider) and {@link #MIN_ITEMS_HEIGHT} for the "Compare by" table, taller
+     * when the window is. Moving a divider down pushes the tables below it down instead of squeezing them.
      */
     private static final class ScrollContent extends JPanel implements Scrollable {
-        private static final int MIN_TABLES_HEIGHT = 460;
+        private static final int MIN_ITEMS_HEIGHT = 340;
         private final JSplitPane split;
+        private final JComponent results;
+        private final JSplitPane tables;
 
-        ScrollContent(JSplitPane split) {
+        ScrollContent(JSplitPane split, JComponent results, JSplitPane tables) {
             super(new BorderLayout());
             this.split = split;
+            this.results = results;
+            this.tables = tables;
             add(split, BorderLayout.CENTER);
         }
 
         @Override
         public Dimension getPreferredSize() {
             return new Dimension(super.getPreferredSize().width,
-                    split.getDividerLocation() + split.getDividerSize() + MIN_TABLES_HEIGHT);
+                    split.getDividerLocation() + split.getDividerSize() + results.getPreferredSize().height
+                            + tables.getDividerLocation() + tables.getDividerSize() + MIN_ITEMS_HEIGHT);
         }
 
         @Override
