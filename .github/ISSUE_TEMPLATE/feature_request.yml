@@ -1,0 +1,21 @@
+name: Feature request
+description: An idea to make the tool more useful
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to diagnose or see?
+      description: The situation (a slow period, a lock, a batch...) and what is missing today
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How could it look?
+      description: Screen, column, view (v$..., pg_stat_...) you have in mind
+  - type: input
+    id: database
+    attributes:
+      label: Database
+      placeholder: "Oracle 19c SE2 / PostgreSQL 16"

@@ -2,7 +2,8 @@
 
 Fork of [akardapolov/ASH-Viewer](https://github.com/akardapolov/ASH-Viewer) (discontinued upstream): a Swing desktop
 app that samples active sessions of Oracle / PostgreSQL every second, stores them locally (Berkeley DB) and shows
-them live (Top Activity, "Agora" tabs) and as history (History, Comparar). Work happens on branch `melhorias-ui`.
+them live (Top Activity, "Agora" tabs) and as history (History, Comparar). Work happens on branch `main`
+(called `melhorias-ui` until 2026-10-29).
 
 The owner is a DBA, not a Java developer: explain in Portuguese and plain terms, present a plan (and the SQL that
 will run against the monitored databases) before big features, and let them test each stage before committing.
@@ -137,8 +138,8 @@ connections left as "running: true" by an abrupt exit), installation `README.txt
 driver (Oracle license): `lib/` is for the user's driver.
 
 Every new version gets a GitHub release with that zip: bump `AppLogo.VERSION`, add the version to `CHANGELOG.md`, write `tools/dist/notes/v<version>.md`,
-commit, tag `v<version>` and push it to `pessoal`, then `tools/dist/make-dist.sh --release`. The repo is private:
-only collaborators can download the release.
+commit, tag `v<version>` and push it to `pessoal`, then `tools/dist/make-dist.sh --release`. The repo is public
+(since 2026-10-29): anyone can download the release, so never commit client data (names, hosts, paths).
 
 ## Commits
 
