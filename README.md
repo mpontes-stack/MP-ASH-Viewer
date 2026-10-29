@@ -42,7 +42,7 @@ version: [CHANGELOG.md](CHANGELOG.md).
 | Database | Status |
 |---|---|
 | **Oracle** 11.2 or later, Standard and Enterprise Edition, CDB / PDB | Developed and tested on 19c (OracleSE profile) |
-| **PostgreSQL** | Only the collection inherited from the original ASH Viewer (Top Activity, History). The features of this fork were **not developed for PostgreSQL yet**: it is the next planned phase |
+| **PostgreSQL** | Reviewed in 1.2.0 (tested on PostgreSQL on AWS RDS). Besides the Top Activity and History of the original ASH Viewer, it gained the features of this fork: **Compare** two periods (by wait class, SQL_ID, session...), **filters** and favorites, **Group by** any column, Top sql & sessions, Raw data, SQL text, CSV export and Admin. The Oracle only screens (Now tabs, ASH Report, Locks, execution plans, SQL statistics) are hidden. More PostgreSQL features are the next planned phase |
 | **MySQL** | Being evaluated |
 
 Oracle RAC: open one connection (one app) per instance.

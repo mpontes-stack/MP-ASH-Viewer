@@ -2,6 +2,20 @@
 
 Changes in each version of MP-ASH-Viewer. Downloads: [Releases](https://github.com/mpontes-stack/MP-ASH-Viewer/releases).
 
+## 1.2.0 (2026-10-29)
+
+PostgreSQL reviewed (tested on PostgreSQL on AWS RDS):
+
+- The features of this fork work on PostgreSQL connections: **Compare** two periods (by wait class, SQL_ID,
+  session...), **filters** and favorites, **Group by** any column, SQL text, CSV export, Admin.
+- The screens that exist only for Oracle are hidden on PostgreSQL: Now: Sessions / Resources / OS, ASH Report,
+  Locks, execution plan and SQL / session statistics. The SQL window shows "ASH" and "Sql text".
+
+Fixed:
+
+- Compare: the "Compare by" table is no longer squeezed when the wait class table is made taller; the tables below
+  are pushed down (scroll bar), as the charts already did.
+
 ## 1.1.0 (2026-10-28)
 
 New:

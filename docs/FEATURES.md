@@ -170,7 +170,10 @@ refreshes (the first one reads twice, 3 s apart).
   `v$sql`).
 - **Top Activity** is a trend view (a point every ~16 s); for what is happening this second use **Now: Sessions**.
 - **Oracle RAC**: not supported as a cluster; open one connection per instance.
-- **PostgreSQL**: only the inherited collection; the features of this fork are planned for a next phase.
+- **PostgreSQL** (reviewed in 1.2.0): Top Activity, History, Compare, filters, Group by, Top sql & sessions, Raw data,
+  SQL text, CSV export and Admin work;
+  the Oracle only screens (Now tabs, ASH Report, Locks, execution plans, SQL statistics) are hidden. More PostgreSQL
+  features are planned for a next phase.
   **MySQL** is being evaluated.
 
 ## What the app reads from the database
