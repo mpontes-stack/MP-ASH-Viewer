@@ -131,13 +131,19 @@ public class MonitorDbPanel {
         mainGanttAndRaw = new JTabbedPane();
         mainGanttAndRaw.addTab("Top sql & sessions", new TabIcon(TabIcon.Type.TOP_SQL), chartDatasetManager.getMainNameChartDataset().getMonitorGantt2());
         mainGanttAndRaw.addTab("Raw data", new TabIcon(TabIcon.Type.RAW), chartDatasetManager.getMainNameChartDataset().getRawDataTable());
-        mainGanttAndRaw.addTab("ASH Report", new TabIcon(TabIcon.Type.REPORT), chartDatasetManager.getMainNameChartDataset().getAshReport());
+        // ASH Report (DBMS_WORKLOAD_REPOSITORY) and Locks (BLOCKING_SESSION) exist only for Oracle
+        boolean isOracle = IProfile.isOracle(connProfile.getProfileName());
+        if (isOracle) {
+            mainGanttAndRaw.addTab("ASH Report", new TabIcon(TabIcon.Type.REPORT), chartDatasetManager.getMainNameChartDataset().getAshReport());
+        }
         objectNames = new ObjectNames(remoteDBManager, connProfile.getProfileName());
         lockTreePanel = new LockTreePanel(storeManager, ashFilter, getFromRemoteAndStore::getMainChartRange,
                 objectNames, true);
         chartDatasetManager.getMainNameChartDataset().getStackChartPanel().addChartListenerReleaseMouse(lockTreePanel);
         chartDatasetManager.getMainNameChartDataset().getStackChartPanel().addChartListenerReleaseMouse(getComparePanel());
-        mainGanttAndRaw.addTab(Labels.getLabel("gui.lock.tab"), new TabIcon(TabIcon.Type.LOCKS), lockTreePanel);
+        if (isOracle) {
+            mainGanttAndRaw.addTab(Labels.getLabel("gui.lock.tab"), new TabIcon(TabIcon.Type.LOCKS), lockTreePanel);
+        }
 
         FilterBar filterBar = newFilterBar(getFromRemoteAndStore::getMainChartRange);
         // filter bar over the width (Reconectar in the corner), below it the title of the chart and "Agrupar por"
@@ -170,12 +176,15 @@ public class MonitorDbPanel {
             mainTabbedPane.add("Detail", detailSplitPane);
         }
         addGuiHistory();
-        mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.sessions"), new TabIcon(TabIcon.Type.SESSIONS),
-                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.SESSIONS));
-        mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.resources"), new TabIcon(TabIcon.Type.RESOURCES),
-                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.RESOURCES));
-        mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.os"), new TabIcon(TabIcon.Type.OS),
-                new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.OS));
+        // "Now" tabs read Oracle v$ views
+        if (IProfile.isOracle(connProfile.getProfileName())) {
+            mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.sessions"), new TabIcon(TabIcon.Type.SESSIONS),
+                    new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.SESSIONS));
+            mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.resources"), new TabIcon(TabIcon.Type.RESOURCES),
+                    new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.RESOURCES));
+            mainTabbedPane.addTab(Labels.getLabel("gui.snapshot.tab.os"), new TabIcon(TabIcon.Type.OS),
+                    new SnapshotPanel(remoteDBManager, connProfile.getProfileName(), SnapshotPanel.Page.OS));
+        }
         addAdmin();
         SqlTextCapture.start();
     }

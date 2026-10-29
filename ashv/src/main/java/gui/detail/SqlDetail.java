@@ -197,10 +197,16 @@ public class SqlDetail extends JFrame implements ActionListener {
         // Load data from remote to local databases
         this.loadData();
 
-        // Add View to JTabbedpane
+        // Add View to JTabbedpane (Postgres keeps no plans nor statistics by SQL_ID: text only)
         this.tabsSessionDetails.add("ASH", splitPaneChart);
-        this.tabsSessionDetails.add("Sql text/plan", sqlTextSplitPane);
-        this.tabsSessionDetails.add("Statistics", tabsStatsDetails);
+        if (getFromRemoteAndStore.getIProfile().isOracle()) {
+            this.tabsSessionDetails.add("Sql text/plan", sqlTextSplitPane);
+        } else {
+            this.tabsSessionDetails.add("Sql text", areaScrollPane);
+        }
+        if (!getFromRemoteAndStore.getIProfile().getSqlStatsQuery().isEmpty()) {
+            this.tabsSessionDetails.add("Statistics", tabsStatsDetails);
+        }
 
         int x = (jFrame.getX() + jFrame.getWidth() / 2) - 450;
         int y = (jFrame.getY() + jFrame.getHeight() / 2) - 250;

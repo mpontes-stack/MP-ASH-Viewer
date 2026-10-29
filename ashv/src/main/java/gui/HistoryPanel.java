@@ -234,7 +234,7 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
         mainStackChartPanelTA.addChartListenerReleaseMouse(monitorGantt20);
         mainStackChartPanelTA.addChartListenerReleaseMouse(rawDataTable20);
 
-        if (ashFilter != null) {
+        if (ashFilter != null && (iProfile == null || iProfile.isOracle())) {
             long[] period = {(long) ganttParam.getBeginTime(), (long) ganttParam.getEndTime()};
             LockTreePanel lockTreePanel = new LockTreePanel(storeManager, ashFilter, () -> period, objectNames, false);
             historyGanttAndRaw.addTab(Labels.getLabel("gui.lock.tab"), new TabIcon(TabIcon.Type.LOCKS), lockTreePanel);

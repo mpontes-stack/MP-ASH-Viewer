@@ -134,7 +134,9 @@ public class SessionDetail extends JFrame implements ActionListener {
 
         // Add View to JTabbedpane
         this.tabsSessionDetails.add("ASH", splitPaneChart);
-        this.tabsSessionDetails.add("Statistics", tabsStatsDetails);
+        if (!getFromRemoteAndStore.getIProfile().getSessionStatsQuery().isEmpty()) { // none for Postgres
+            this.tabsSessionDetails.add("Statistics", tabsStatsDetails);
+        }
 
         int x = (jFrame.getX() + jFrame.getWidth() / 2) - 450;
         int y = (jFrame.getY() + jFrame.getHeight() / 2) - 250;

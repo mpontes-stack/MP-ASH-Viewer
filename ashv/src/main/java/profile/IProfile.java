@@ -6,6 +6,15 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 public interface IProfile {
+    /** Oracle profiles (OracleSE, OracleEE...): screens built on v$ views, ASH report, plans, locks */
+    static boolean isOracle(String profileName) {
+        return profileName != null && profileName.startsWith("Oracle");
+    }
+
+    default boolean isOracle() {
+        return isOracle(getProfileName());
+    }
+
     String getProfileName();
     String getDriverName();
 
