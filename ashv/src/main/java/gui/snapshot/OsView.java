@@ -36,8 +36,8 @@ import javax.swing.table.DefaultTableModel;
  * last two readings.
  */
 class OsView {
-    /** Points of the chart: one per refresh (1 hour with the 60 s auto refresh) */
-    private static final int MAX_POINTS = 60;
+    /** The chart shows the last hour (one point per refresh, also while the tab is hidden) */
+    private static final long CHART_WINDOW_MS = 3600_000L;
     private static final double GB = 1024.0 * 1024 * 1024;
     /** Paging from this rate on is shown as a warning */
     private static final double PAGING_WARN_MBS = 1;
@@ -58,8 +58,11 @@ class OsView {
     private JPanel pdbSection;
     private final Chart chart = new Chart();
 
+    // full readings (tab shown): the differences of the CPU, memory, PDB and I/O blocks
     private Reading previous;
     private Reading last;
+    // last reading of the chart: full readings and the v$osstat only readings taken while the tab is hidden
+    private Reading chartLast;
     private final List<Point> points = new ArrayList<>();
 
     OsView(SnapshotPanel panel) {
@@ -80,11 +83,12 @@ class OsView {
                 panel.collapsible(panel.shareTable(ioModel, 8))), "span 2, wrap");
     }
 
-    boolean hasReading() {
-        return last != null;
+    /** A full reading not older than maxAgeMs (an older one would average the blocks over a long time) */
+    boolean hasReading(long maxAgeMs) {
+        return last != null && System.currentTimeMillis() - last.time <= maxAgeMs;
     }
 
-    /** A new reading: the previous one is kept for the differences (EDT) */
+    /** A new full reading: the previous one is kept for the differences (EDT) */
     void add(Map<String, SnapshotService.Result> r) {
         Reading reading = Reading.of(r);
         if (reading == null) {
@@ -92,20 +96,37 @@ class OsView {
         }
         if (last != null && reading.before(last)) { // instance restarted: counters back to zero
             last = null;
-            points.clear();
         }
         previous = last;
         last = reading;
-        if (previous != null) {
-            Interval i = new Interval(previous, last);
+        addChartPoint(reading);
+    }
+
+    /** A v$osstat only reading taken while the tab is hidden: a point of the chart (EDT) */
+    void addChartReading(Map<String, SnapshotService.Result> r) {
+        Reading reading = Reading.of(r);
+        if (reading != null) {
+            addChartPoint(reading);
+            chart.repaint();
+        }
+    }
+
+    private void addChartPoint(Reading reading) {
+        if (chartLast != null && reading.before(chartLast)) {
+            chartLast = null;
+            points.clear();
+        }
+        if (chartLast != null) {
+            Interval i = new Interval(chartLast, reading);
             if (i.total > 0) {
-                points.add(new Point(last.time, i.pct("USER_TIME"), i.pct("SYS_TIME"), i.pct("IOWAIT_TIME"),
-                        i.pct("IDLE_TIME"), last.loadPerCore()));
-                while (points.size() > MAX_POINTS) {
+                points.add(new Point(reading.time, i.pct("USER_TIME"), i.pct("SYS_TIME"), i.pct("IOWAIT_TIME"),
+                        i.pct("IDLE_TIME"), reading.loadPerCore()));
+                while (!points.isEmpty() && reading.time - points.get(0).time > CHART_WINDOW_MS) {
                     points.remove(0);
                 }
             }
         }
+        chartLast = reading;
     }
 
     void render(Map<String, SnapshotService.Result> r) {

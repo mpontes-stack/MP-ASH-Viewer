@@ -68,6 +68,8 @@ public class SnapshotPanel extends JPanel {
             OracleSnapshotQueries.OS_PLATFORM, OracleSnapshotQueries.OS_PDB_CPU);
     /** The OS counters are totals since the start of the instance: the first refresh reads twice, this far apart */
     private static final long OS_FIRST_INTERVAL_MS = 3000;
+    /** Read while the OS tab is hidden (auto refresh on), for the chart only: one cheap query */
+    private static final List<String> OS_CHART_QUERIES = java.util.Collections.singletonList(OracleSnapshotQueries.OS_STAT);
 
     static final double WARN_PCT = 85;
     static final double CRITICAL_PCT = 95;
@@ -154,6 +156,7 @@ public class SnapshotPanel extends JPanel {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Timer timer;
     private long lastRefresh = 0;
+    private int autoSeconds = 0;
 
     public SnapshotPanel(RemoteDBManager remoteDBManager, String profileName, Page page) {
         super(new BorderLayout());
@@ -162,8 +165,14 @@ public class SnapshotPanel extends JPanel {
         this.isOracle = profileName != null && profileName.toLowerCase().startsWith("oracle");
 
         this.timer = new Timer(1000, e -> {
+            if (!isDisplayable()) { // removed from the window (connection closed): stop reading
+                ((Timer) e.getSource()).stop();
+                return;
+            }
             if (isShowing()) {
                 refresh();
+            } else if (page == Page.OS) {
+                refreshChart(); // the chart keeps its history while the tab is hidden
             }
         });
 
@@ -185,6 +194,9 @@ public class SnapshotPanel extends JPanel {
         });
 
         setAutoRefresh(AUTO_DEFAULT_INDEX);
+        if (page == Page.OS) {
+            refreshChart(); // first point of the chart one interval after connecting
+        }
     }
 
     private JPanel createToolbar() {
@@ -268,6 +280,7 @@ public class SnapshotPanel extends JPanel {
 
     private void setAutoRefresh(int index) {
         int seconds = AUTO_SECONDS[Math.max(0, Math.min(index, AUTO_SECONDS.length - 1))];
+        autoSeconds = seconds;
         timer.stop();
         if (seconds > 0) {
             timer.setDelay(seconds * 1000);
@@ -287,7 +300,8 @@ public class SnapshotPanel extends JPanel {
         statusLbl.setText(Labels.getLabel("gui.snapshot.refreshing"));
         long start = System.currentTimeMillis();
 
-        boolean firstOsReading = page == Page.OS && !osView.hasReading();
+        // read twice when there is no recent reading (first refresh, or the tab was hidden for a while)
+        boolean firstOsReading = page == Page.OS && !osView.hasReading(Math.max(120_000L, 2000L * autoSeconds));
         new SwingWorker<List<Map<String, SnapshotService.Result>>, Void>() {
             @Override
             protected List<Map<String, SnapshotService.Result>> doInBackground() throws Exception {
@@ -325,6 +339,38 @@ public class SnapshotPanel extends JPanel {
                     lastRefresh = System.currentTimeMillis();
                     running.set(false);
                     refreshButton.setEnabled(true);
+                }
+            }
+        }.execute();
+    }
+
+    /**
+     * OS tab hidden: read only v$osstat in background for a point of the chart (skipped while a refresh is running)
+     */
+    private void refreshChart() {
+        if (!isOracle || !running.compareAndSet(false, true)) {
+            return;
+        }
+        new SwingWorker<Map<String, SnapshotService.Result>, Void>() {
+            @Override
+            protected Map<String, SnapshotService.Result> doInBackground() {
+                Map<String, String> queries = new java.util.LinkedHashMap<>();
+                OracleSnapshotQueries.queries().forEach((k, q) -> {
+                    if (OS_CHART_QUERIES.contains(k)) {
+                        queries.put(k, q);
+                    }
+                });
+                return service.run(queries, OracleSnapshotQueries.views());
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    osView.addChartReading(get());
+                } catch (Exception e) {
+                    log.error("OS chart reading: " + e.getMessage());
+                } finally {
+                    running.set(false);
                 }
             }
         }.execute();

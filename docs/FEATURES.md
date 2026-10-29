@@ -112,7 +112,8 @@ refreshes (the first one reads twice, 3 s apart).
   high CPU from Oracle or from something else? Waiting for Resource Manager shows when a resource plan is limiting
   the database.
 - **Server memory**: total RAM, free, OS cache, free swap, paging (swap in / out), Oracle SGA and PGA.
-- **One chart** with user, sys, I/O wait, idle and load per core, one point per refresh (the last 60).
+- **One chart** with user, sys, I/O wait, idle and load per core of the last hour, one point per refresh. With the
+  automatic refresh on, the chart keeps its history while the tab is hidden: only `v$osstat` is read then.
 - **Database I/O by function** (`v$iostat_function`): read / write MB/s, I/O per second, average latency and share of
   Buffer Cache Reads, Direct Reads, LGWR, DBWR, RMAN...
 - What "this database" means depends on the connection: the instance (non-CDB), **the PDB only** (connected to a
