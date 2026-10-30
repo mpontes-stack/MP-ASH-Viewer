@@ -49,6 +49,15 @@
 - Right click a value in a table to filter by it. **Favorites** saves a combination of filters.
 - **Group by**: the chart by wait class (default) or by a column (top 10 values + Others); double click an area to
   filter by its value.
+- **PL/SQL caller** (OracleSE): group by or compare by `PLSQL_ENTRY` to see the SQLs run inside one procedure as one
+  block, like the "Top Level SQL" of Enterprise Manager: `OWNER.PACKAGE.PROCEDURE` is the PL/SQL the session called
+  first (`plsql_entry_object_id` + `plsql_entry_subprogram_id` of `v$session`). `PLSQL_ENTRY_OBJECT_ID` groups by
+  package. The names come from `dba_procedures` (or `all_procedures`), looked up once per package while connected;
+  offline the ids are shown. SQL sent directly by the application, without a procedure, is "(empty)".
+- **Hide background** (Oracle), next to the Top Activity, History and Compare charts: hides the sessions of the
+  background processes (`SESSION_TYPE = BACKGROUND`: DBWn, LGWR, MMON...), which often fill "(empty)" when grouping by
+  MODULE or ACTION. It is not one of the filters (Clear and favorites keep it) and the choice is kept for the next
+  connections.
 
 ## History
 
@@ -186,6 +195,8 @@ refreshes (the first one reads twice, 3 s apart).
 | On demand | SQL text, plan, session and SQL details | `v$sql`, `v$sql_plan`, `v$session` |
 | DBMS_XPLAN tab | plan text of a child cursor | `DBMS_XPLAN.DISPLAY_CURSOR` (`v$sql_plan`, `v$sql_plan_statistics_all`) |
 | Locks | object names of the ids shown | `dba_objects` (or `all_objects`) |
+| Group by / Compare / filter by PLSQL_ENTRY | names of the packages shown, once per package | `dba_procedures` (or `all_procedures`) |
+| Now: OS (tab hidden, auto refresh on) | CPU and load for the chart | `v$osstat` |
 | Now: OS (refresh) | CPU, load, memory and I/O of the server, CPU by container | `v$osstat`, `v$sys_time_model`, `v$sgainfo`, `v$pgastat`, `v$iostat_function`, `v$con_sys_time_model` + `v$containers` (CDB root) |
 | Now tabs (refresh) | sessions, limits, PGA, TEMP, UNDO, tablespaces, FRA, Data Guard, long operations, jobs | see the grants in the [README](../README.md#database-privileges) |
 | ASH Report tab | ASH report text | `DBMS_WORKLOAD_REPOSITORY` (Diagnostics Pack) |

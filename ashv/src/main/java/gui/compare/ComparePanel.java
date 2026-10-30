@@ -80,7 +80,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     // Columns of "Comparar por" (shown when collected)
     private static final List<String> DIMENSIONS = Arrays.asList(
             "SQL_ID", "EVENT", "MODULE", "ACTION", "PROGRAM", "USERNAME", "MACHINE", PeriodComparison.SESSION,
-            "SERVICE_NAME", "CLIENT_IDENTIFIER", "COMMAND", "CURRENT_OBJ#", "PLSQL_ENTRY_OBJECT_ID",
+            "SERVICE_NAME", "CLIENT_IDENTIFIER", "COMMAND", "CURRENT_OBJ#", "PLSQL_ENTRY_OBJECT_ID", "PLSQL_ENTRY",
+            "TOP_LEVEL_SQL_ID",
             "SESSION_TYPE", "OSUSER", "PREV_SQL_ID");
 
     private final StoreManager storeManager;
@@ -110,6 +111,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     private Map<String, Set<String>> focus;
     private final JLabel focusLabel = new JLabel();
     private final JPanel focusBar = new JPanel(new MigLayout("ins 2 8 2 4", "[][]"));
+    private final JPanel chartOptions = new JPanel(new MigLayout("ins 0", "[]"));
     /** Fixed above the scrolled content: filter bar and the item shown in the charts */
     private final JPanel north = new JPanel(new BorderLayout());
 
@@ -172,7 +174,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         top.add(endA);
         top.add(yesterday, "gapleft 12");
         top.add(lastWeek);
-        top.add(previous, "wrap");
+        top.add(previous);
+        top.add(chartOptions, "gapleft 24, wrap");
         JButton showAll = new JButton(Labels.getLabel("gui.compare.focus.all"));
         showAll.addActionListener(e -> setFocus(null, null));
         focusLabel.setFont(focusLabel.getFont().deriveFont(Font.BOLD));
@@ -329,6 +332,12 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     }
 
     /** Filter bar of the tab (the same filter as Top Activity and History) */
+    /** An option of the charts ("Hide background") at the end of the period A row */
+    public void setChartOption(JComponent option) {
+        chartOptions.add(option);
+        revalidate();
+    }
+
     public void setFilterBar(JComponent filterBar) {
         north.add(filterBar, BorderLayout.CENTER);
         revalidate();
@@ -387,7 +396,8 @@ public class ComparePanel extends JPanel implements IDetailPanel {
                     values.add("");
                 }
                 f.put(c.getKey(), values);
-                text.add(c.getKey() + " = " + (c.getValue().isEmpty() ? Labels.getLabel("gui.filter.empty") : c.getValue()));
+                text.add(c.getKey() + " = " + (c.getValue().isEmpty() ? Labels.getLabel("gui.filter.empty")
+                        : core.plsql.PlsqlNames.display(c.getKey(), c.getValue())));
             }
             focus = f;
             focusLabel.setText(Labels.getLabel("gui.compare.focus") + " " + String.join("  e  ", text));
@@ -452,6 +462,9 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             try {
                 result = PeriodComparison.load(storeManager, iProfile, matcher, a, b, DIMENSIONS,
                         () -> generation.get() != gen);
+                if (result != null) {
+                    lookupPlsqlNames(result);
+                }
             } catch (Exception e) {
                 log.error("Compare periods", e);
                 SwingUtilities.invokeLater(() -> {
@@ -470,6 +483,17 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         }, "compare-periods");
         t.setDaemon(true);
         t.start();
+    }
+
+    /** Names of the PL/SQL ids of the comparison (in the compare thread, before the tables are shown) */
+    private static void lookupPlsqlNames(PeriodComparison result) {
+        for (String dimension : result.getDimensions()) {
+            if (core.plsql.PlsqlNames.isPlsqlColumn(dimension)) {
+                List<String> values = new java.util.ArrayList<>();
+                result.items(dimension, PeriodComparison.Measure.TOTAL).forEach(i -> values.add(i.getValue()));
+                core.plsql.PlsqlNames.lookup(dimension, values);
+            }
+        }
     }
 
     private void show(PeriodComparison result, IProfile iProfile) {
@@ -509,6 +533,15 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         ItemsModel model = new ItemsModel(label(dimension), last.items(dimension, measure), last, measure);
         lastItems = model;
         JXTable table = table(model);
+        if (core.plsql.PlsqlNames.isPlsqlColumn(dimension)) { // OWNER.PACKAGE.PROCEDURE instead of the ids
+            table.getColumnExt(ItemsModel.COL_VALUE).setCellRenderer(new DefaultTableCellRenderer() {
+                @Override
+                protected void setValue(Object value) {
+                    String text = value == null ? "" : core.plsql.PlsqlNames.display(dimension, String.valueOf(value));
+                    setText(text.isEmpty() ? Labels.getLabel("gui.filter.empty") : text);
+                }
+            });
+        }
         IProfile iProfile = lastProfile;
         BiFunction<Integer, Integer, List<List<Map.Entry<String, String>>>> itemConditions = (row, col) ->
                 conditions(table, row, col, dimension, iProfile);

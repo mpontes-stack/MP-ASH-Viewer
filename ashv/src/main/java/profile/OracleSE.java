@@ -28,7 +28,10 @@ public class OracleSE extends OracleEE implements IProfile {
             // plan of the running child cursor (v$session has no plan hash): compare periods shows plan changes
             + "vs.sql_exec_id SQL_EXEC_ID, "
             + "(CASE WHEN vs.sql_id IS NOT NULL THEN (SELECT s.plan_hash_value FROM v$sql s "
-            + "WHERE s.sql_id = vs.sql_id AND s.child_number = vs.sql_child_number AND rownum = 1) END) SQL_PLAN_HASH_VALUE "
+            + "WHERE s.sql_id = vs.sql_id AND s.child_number = vs.sql_child_number AND rownum = 1) END) SQL_PLAN_HASH_VALUE, "
+            // PL/SQL called first by the session (package + its subprogram): groups the SQLs run by one procedure
+            + "(CASE WHEN vs.plsql_entry_object_id IS NOT NULL "
+            + "THEN vs.plsql_entry_object_id || '.' || vs.plsql_entry_subprogram_id END) PLSQL_ENTRY "
             + "FROM "
             + "v$session vs, v$sesstat vss, audit_actions au "
             + "WHERE vs.sid != ( select distinct sid from v$mystat  where rownum < 2 ) "

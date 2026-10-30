@@ -62,7 +62,9 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
   show the new columns as empty. Never reorder or remove columns.
 - **Cost on production:** the queries run every second on production databases. Keep additions cheap (columns of
   `v$session`, scalar lookups by key) and explain the cost before adding anything. Today OracleSE also reads
-  `SQL_EXEC_ID` and the plan of the running child (`v$sql` by sql_id + child_number); `SqlTextCapture` reads
+  `SQL_EXEC_ID`, the plan of the running child (`v$sql` by sql_id + child_number) and `PLSQL_ENTRY`
+  (`plsql_entry_object_id.plsql_entry_subprogram_id`; names from `dba_procedures` in `core/plsql/PlsqlNames`, once
+  per package, off the EDT); `SqlTextCapture` reads
   `v$sql` every 10 min in batches of 100 SQL_IDs.
 - **PDB:** many monitored databases are PDBs, where some `v$` views are empty (`v$resource_limit`) or show only the
   PDB. Check new `v$` queries inside the PDB and in the CDB (the test database is a PDB; `/ as sysdba` in the
@@ -125,7 +127,7 @@ tools/testdb/testdb.sh status | stop | cleanup
 
 Scenarios: `cpu`, `io` (direct path reads), `plan_change` (same SQL_ID, new plan at half time: index made visible),
 `long_exec` (executions of several seconds), `many_execs` (short PK lookups), `lock` (row lock holder + waiters),
-`mixed`. Every session sets MODULE `ashv_test` and ACTION = scenario, so the app can filter them.
+`mixed`, `plsql` (package `ashv_pkg` with 3 procedures, each running its own SQL: `PLSQL_ENTRY`). Every session sets MODULE `ashv_test` and ACTION = scenario, so the app can filter them.
 The script refuses to connect unless port 1521 is published by the container: production databases are reached
 through SSM tunnels on localhost ports.
 

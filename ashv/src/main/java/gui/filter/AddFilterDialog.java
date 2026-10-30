@@ -53,6 +53,8 @@ public class AddFilterDialog extends JDialog {
     private final JButton applyButton = new JButton(Labels.getLabel("gui.filter.apply"));
     private final JButton cancelButton = new JButton(Labels.getLabel("gui.filter.cancel"));
 
+    private static final int COL_STORED = 2;
+
     private SwingWorker<Map<String, Integer>, Void> worker;
 
     public AddFilterDialog(Window owner, AshFilter ashFilter, FilteredAshLoader filteredAshLoader,
@@ -62,14 +64,16 @@ public class AddFilterDialog extends JDialog {
         this.filteredAshLoader = filteredAshLoader;
         this.rangeSupplier = rangeSupplier;
 
+        // the stored value is a hidden column: the first one shows names (PL/SQL ids) and "(empty)"
         valueModel = new DefaultTableModel(new Object[]{
-                Labels.getLabel("gui.filter.value"), Labels.getLabel("gui.filter.samples")}, 0) {
+                Labels.getLabel("gui.filter.value"), Labels.getLabel("gui.filter.samples"), "value"}, 0) {
             @Override public boolean isCellEditable(int row, int column) { return false; }
             @Override public Class<?> getColumnClass(int columnIndex) { return columnIndex == 1 ? Integer.class : String.class; }
         };
         valueTable = new JXTable(valueModel);
         valueTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         valueTable.setColumnControlVisible(false);
+        valueTable.getColumnExt(COL_STORED).setVisible(false);
         valueTable.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -139,7 +143,9 @@ public class AddFilterDialog extends JDialog {
         worker = new SwingWorker<Map<String, Integer>, Void>() {
             @Override
             protected Map<String, Integer> doInBackground() {
-                return filteredAshLoader.distinctValues(colName, range[0], range[1]);
+                Map<String, Integer> values = filteredAshLoader.distinctValues(colName, range[0], range[1]);
+                core.plsql.PlsqlNames.lookup(colName, values.keySet());
+                return values;
             }
 
             @Override
@@ -154,13 +160,15 @@ public class AddFilterDialog extends JDialog {
 
                     values.entrySet().stream()
                             .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
-                            .forEach(v -> valueModel.addRow(new Object[]{FilterBar.displayValue(v.getKey()), v.getValue()}));
+                            .forEach(v -> valueModel.addRow(new Object[]{
+                                    FilterBar.displayValue(core.plsql.PlsqlNames.display(colName, v.getKey())),
+                                    v.getValue(), v.getKey()}));
 
                     valueTable.setSortOrder(1, SortOrder.DESCENDING);
                     valueTable.packAll();
 
                     for (int i = 0; i < valueTable.getRowCount(); i++) {
-                        String v = FilterBar.storedValue((String) valueTable.getValueAt(i, 0));
+                        String v = stored(i);
                         if (selected.contains(v)) {
                             valueTable.addRowSelectionInterval(i, i);
                         }
@@ -175,6 +183,11 @@ public class AddFilterDialog extends JDialog {
             }
         };
         worker.execute();
+    }
+
+    /** Value of a row of the table (view index) as stored in the samples */
+    private String stored(int viewRow) {
+        return (String) valueModel.getValueAt(valueTable.convertRowIndexToModel(viewRow), COL_STORED);
     }
 
     /** Key of the condition for the selected mode: "COL" (=) or "!COL" (!=) */
@@ -199,7 +212,7 @@ public class AddFilterDialog extends JDialog {
         }
 
         Set<String> values = Arrays.stream(rows)
-                .mapToObj(r -> FilterBar.storedValue((String) valueTable.getValueAt(r, 0)))
+                .mapToObj(this::stored)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         dispose();

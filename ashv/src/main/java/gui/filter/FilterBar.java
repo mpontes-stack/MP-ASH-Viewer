@@ -33,7 +33,8 @@ public class FilterBar extends JPanel {
             "WAIT_CLASS", "EVENT", "SQL_ID", "SESSION_ID", "USERNAME", "PROGRAM", "MODULE", "ACTION",
             "MACHINE", "OSUSER", "SERVICE_NAME", "CLIENT_IDENTIFIER", "CLIENT_INFO", "COMMAND",
             "SESSION_TYPE", "SESSION_STATE", "BLOCKING_SESSION", "BLOCKING_SESSION_STATUS",
-            "FINAL_BLOCKING_SESSION", "PLSQL_ENTRY_OBJECT_ID", "PREV_SQL_ID", "SQL_HASH_VALUE",
+            "FINAL_BLOCKING_SESSION", "PLSQL_ENTRY_OBJECT_ID", "PLSQL_ENTRY", "TOP_LEVEL_SQL_ID", "PREV_SQL_ID",
+            "SQL_HASH_VALUE",
             "CURRENT_OBJ#", "USER_ID");
 
     private static final int MAX_CHIP_TEXT = 60;
@@ -204,7 +205,9 @@ public class FilterBar extends JPanel {
      */
     static String describeCondition(String key, Set<String> values) {
         String op = AshFilter.isExclusion(key) ? " \u2260 " : " = ";
-        return AshFilter.colOf(key) + op + values.stream().map(FilterBar::displayValue).collect(Collectors.joining(", "));
+        String col = AshFilter.colOf(key);
+        return col + op + values.stream().map(v -> displayValue(core.plsql.PlsqlNames.display(col, v)))
+                .collect(Collectors.joining(", "));
     }
 
     private List<String> getFilterColumns() {
@@ -225,10 +228,6 @@ public class FilterBar extends JPanel {
 
     static String displayValue(String value) {
         return value == null || value.isEmpty() ? Labels.getLabel("gui.filter.empty") : value;
-    }
-
-    static String storedValue(String display) {
-        return Labels.getLabel("gui.filter.empty").equals(display) ? Labels.getLabel("local.null") : display;
     }
 
     private static String escape(String s) {

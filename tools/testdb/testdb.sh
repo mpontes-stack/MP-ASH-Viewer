@@ -10,7 +10,7 @@
 #   tools/testdb/testdb.sh cleanup               stop and drop the test tables
 #   tools/testdb/testdb.sh sql "<statement>"     run one statement as the test user
 #
-# Scenarios: cpu | io | plan_change | long_exec | many_execs | lock | mixed
+# Scenarios: cpu | io | plan_change | long_exec | many_execs | lock | mixed | plsql (3 procedures of a package)
 # All sessions set MODULE = 'ashv_test' and ACTION = <scenario>: filter by them in the app.
 #
 # Settings (environment or ~/.config/mp-ashv/testdb.env): ASHV_TESTDB_CONTAINER (oracle19c), ASHV_TESTDB_USER
@@ -109,6 +109,9 @@ commit;" >/dev/null || die "rode antes: $0 setup"
             for s in $(seq 1 "$sessions"); do launch "${scenario}_$s" "$scenario.sql" "$minutes"; done ;;
         plan_change)
             launch plan_change plan_change.sql "$minutes" ;;
+        plsql)
+            sqlplus_script plsql_pkg.sql
+            for s in $(seq 1 "$sessions"); do launch "plsql_$s" plsql.sql "$minutes"; done ;;
         lock)
             launch lock_holder lock_holder.sql "$minutes"
             sleep 3

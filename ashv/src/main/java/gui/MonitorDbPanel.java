@@ -122,6 +122,7 @@ public class MonitorDbPanel {
     }
 
     public void initializeGui(){
+        initHideBackground();
         topActivitySplitPane = new JSplitPane();
         topActivitySplitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
         topActivitySplitPane.setOneTouchExpandable(true);
@@ -205,6 +206,9 @@ public class MonitorDbPanel {
         if (comparePanel == null) {
             comparePanel = new ComparePanel(storeManager, ashFilter, filteredAshLoader, colorManager, this::getHistoryRange);
             comparePanel.setFilterBar(newFilterBar(comparePanel::getFilterRange));
+            if (hideBackgroundAvailable) {
+                comparePanel.setChartOption(new gui.filter.BackgroundToggle(ashFilter));
+            }
         }
         return comparePanel;
     }
@@ -214,9 +218,10 @@ public class MonitorDbPanel {
             "SQL_ID", "MODULE", "ACTION", "PROGRAM", "USERNAME", "OSUSER", "MACHINE", "SESSION_ID",
             "SERVICE_NAME", "CLIENT_IDENTIFIER", "CLIENT_INFO", "EVENT", "COMMAND", "SESSION_TYPE",
             "BLOCKING_SESSION", "FINAL_BLOCKING_SESSION", "PREV_SQL_ID", "SQL_HASH_VALUE",
-            "PLSQL_ENTRY_OBJECT_ID", "CURRENT_OBJ#"};
+            "PLSQL_ENTRY_OBJECT_ID", "PLSQL_ENTRY", "TOP_LEVEL_SQL_ID", "CURRENT_OBJ#"};
 
     private JPanel chartCards;
+    private boolean hideBackgroundAvailable;
 
     /**
      * "Group by" combo: wait class (original chart) or a raw data column (grouped chart)
@@ -290,6 +295,10 @@ public class MonitorDbPanel {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         panel.add(new JLabel(Labels.getLabel("gui.groupby.label")));
         panel.add(groupByBox);
+        if (hideBackgroundAvailable) {
+            panel.add(Box.createHorizontalStrut(12));
+            panel.add(new gui.filter.BackgroundToggle(ashFilter));
+        }
         return panel;
     }
 
@@ -438,7 +447,19 @@ public class MonitorDbPanel {
         }
     }
 
+    /**
+     * Options of the opened connection, before the charts are built: "Hide background" (Oracle only, the choice of
+     * the last connection) and the names of PL/SQL ids
+     */
+    private void initHideBackground() {
+        core.plsql.PlsqlNames.configure(remoteDBManager, connProfile == null ? null : connProfile.getProfileName());
+        hideBackgroundAvailable = gui.filter.BackgroundToggle.isAvailable(
+                storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList());
+        ashFilter.initHideBackground(hideBackgroundAvailable && gui.filter.BackgroundToggle.saved());
+    }
+
     public void loadHistory(){
+        initHideBackground();
         controlMainDetailHistory = new JPanel();
         controlMainDetailHistory.setLayout(new BorderLayout());
 

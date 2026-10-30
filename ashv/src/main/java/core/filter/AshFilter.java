@@ -29,6 +29,8 @@ public class AshFilter {
     private final ConvertManager convertManager;
 
     private final LinkedHashMap<String, LinkedHashSet<String>> conditions = new LinkedHashMap<>();
+    /** "Hide background" next to the charts: not a condition of the filter bar (Clear and favorites keep it) */
+    private volatile boolean hideBackground;
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
     @Inject
@@ -52,8 +54,29 @@ public class AshFilter {
         return isExclusion(key) ? key.substring(EXCLUSION_PREFIX.length()) : key;
     }
 
+    /** Oracle background processes: SESSION_TYPE of v$session (USER / BACKGROUND) and of ASH (FOREGROUND / BACKGROUND) */
+    public static final String SESSION_TYPE = "SESSION_TYPE";
+    public static final String BACKGROUND = "BACKGROUND";
+
     public synchronized boolean isActive() {
-        return !conditions.isEmpty();
+        return !conditions.isEmpty() || hideBackground;
+    }
+
+    public boolean isHideBackground() {
+        return hideBackground;
+    }
+
+    /** Initial value when a connection opens, before the charts are loaded (no change notification) */
+    public void initHideBackground(boolean hide) {
+        hideBackground = hide;
+    }
+
+    /** Hide the rows of background processes in every chart and table that follows the filter */
+    public void setHideBackground(boolean hide) {
+        if (hideBackground != hide) {
+            hideBackground = hide;
+            fireChanged();
+        }
     }
 
     public synchronized Map<String, Set<String>> getConditions() {
@@ -115,7 +138,7 @@ public class AshFilter {
      * (used to list the values of a column while the other filters stay applied).
      */
     public Matcher matcher(List<SqlColProfile> colProfiles, String ignoreColName) {
-        Map<String, Set<String>> current = getConditions();
+        Map<String, Set<String>> current = withBackground(getConditions());
         if (ignoreColName != null) {
             current.remove(ignoreColName);
             current.remove(exclusionKey(ignoreColName));
@@ -132,9 +155,19 @@ public class AshFilter {
      * an extra condition on a filtered column replaces it
      */
     public Matcher matcherWith(List<SqlColProfile> colProfiles, Map<String, Set<String>> extra) {
-        Map<String, Set<String>> current = getConditions();
+        Map<String, Set<String>> current = withBackground(getConditions());
         current.putAll(extra);
         return new Matcher(colProfiles, current);
+    }
+
+    /** The conditions plus SESSION_TYPE != BACKGROUND when "Hide background" is on */
+    private Map<String, Set<String>> withBackground(Map<String, Set<String>> current) {
+        if (hideBackground) {
+            Set<String> excluded = new LinkedHashSet<>(current.getOrDefault(exclusionKey(SESSION_TYPE), Collections.emptySet()));
+            excluded.add(BACKGROUND);
+            current.put(exclusionKey(SESSION_TYPE), excluded);
+        }
+        return current;
     }
 
     /**

@@ -161,16 +161,22 @@ public class GroupByChart {
                 .collect(Collectors.toList());
         boolean hasOthers = totals.size() > top.size();
 
+        // PL/SQL ids: names looked up in background, the chart is rebuilt when they arrive
+        core.plsql.PlsqlNames.lookupLater(col, top, () -> refresh(true));
+
         // Series names in stack order (largest at the bottom)
         LinkedHashMap<String, String> seriesByValue = new LinkedHashMap<>();
         Map<String, String> valueByName = new HashMap<>();
         top.forEach(v -> {
-            String name = v.isEmpty() ? emptyLabel : v;
+            String name = v.isEmpty() ? emptyLabel : core.plsql.PlsqlNames.display(col, v);
+            if (name.length() > MAX_LEGEND_TEXT && core.plsql.PlsqlNames.isPlsqlColumn(col) && name.indexOf('.') > 0) {
+                name = name.substring(name.indexOf('.') + 1); // PACKAGE.PROCEDURE: the owner gives way first
+            }
             if (name.length() > MAX_LEGEND_TEXT) {
                 name = name.substring(0, MAX_LEGEND_TEXT - 3) + "...";
-                while (valueByName.containsKey(name)) {
-                    name = name + " "; // keep truncated names unique
-                }
+            }
+            while (valueByName.containsKey(name)) {
+                name = name + " "; // keep names unique (truncated names, overloaded procedures)
             }
             seriesByValue.put(v, name);
             valueByName.put(name, v);

@@ -19,6 +19,9 @@ GRANT SELECT ON sys.v_$sql_plan_statistics_all TO ashv;   -- DBMS_XPLAN tab, for
 
 -- Locks: object names (falls back to ALL_OBJECTS without it)
 GRANT SELECT ON sys.dba_objects    TO ashv;
+-- Names of PLSQL_ENTRY / PLSQL_ENTRY_OBJECT_ID (package.procedure) in Group by, Compare and filters
+-- (falls back to ALL_PROCEDURES without it)
+GRANT SELECT ON sys.dba_procedures TO ashv;
 
 -- Now: Sessions / Now: Resources (each section shows "no permission" when its view is missing)
 GRANT SELECT ON sys.v_$instance                     TO ashv;
