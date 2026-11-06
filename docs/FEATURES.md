@@ -49,6 +49,9 @@
 - Right click a value in a table to filter by it. **Favorites** saves a combination of filters.
 - **Group by**: the chart by wait class (default) or by a column (top 10 values + Others); double click an area to
   filter by its value.
+- **Hide (empty)**, next to "Group by" and "Compare by": leaves out the "(empty)" value of the grouped column
+  (sessions without MODULE, ACTION...) in the Group by charts and in the Compare by table. It is not a filter (the
+  other tables keep those sessions); the choice is kept for the next connections.
 - **PL/SQL caller** (OracleSE): group by or compare by `PLSQL_ENTRY` to see the SQLs run inside one procedure as one
   block, like the "Top Level SQL" of Enterprise Manager: `OWNER.PACKAGE.PROCEDURE` is the PL/SQL the session called
   first (`plsql_entry_object_id` + `plsql_entry_subprogram_id` of `v$session`). `PLSQL_ENTRY_OBJECT_ID` groups by
@@ -190,7 +193,7 @@ refreshes (the first one reads twice, 3 s apart).
 
 | When | Query | Views |
 |---|---|---|
-| Every second (OracleSE) | active sessions; for the running SQL its plan hash value | `v$session`, `v$sesstat`, `v$mystat`, `audit_actions`, `v$sql` (by SQL_ID + child number) |
+| Every second (OracleSE) | active sessions; for the running SQL its plan hash value | `v$session`, `v$mystat`, `audit_actions`, `v$sql` (by SQL_ID + child number) |
 | Every 10 min | texts of the SQL_IDs collected, batches of 100 | `v$sql` |
 | On demand | SQL text, plan, session and SQL details | `v$sql`, `v$sql_plan`, `v$session` |
 | DBMS_XPLAN tab | plan text of a child cursor | `DBMS_XPLAN.DISPLAY_CURSOR` (`v$sql_plan`, `v$sql_plan_statistics_all`) |

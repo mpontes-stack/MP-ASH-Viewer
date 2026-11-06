@@ -127,6 +127,13 @@ public class HistoryPanel extends JPanel implements IDetailPanel {
         }
     }
 
+    /** "Hide (empty)" changed: redraw the charts when they are grouped by a column */
+    public void refreshGroupBy() {
+        if (groupByColName != null) {
+            setGroupBy(groupByColName);
+        }
+    }
+
     /**
      * History chart by wait class (aggregated or filtered data) or grouped by {@link #groupByColName}
      */

@@ -253,6 +253,11 @@ public class MonitorDbPanel {
                         Labels.getLabel("gui.groupby.loading"));
                 cardLayout.show(chartCards, "groupby");
             }
+        }, () -> {
+            if (groupByChart.isActive()) {
+                ProgressBarUtil.runProgressDialog(() -> groupByChart.refresh(true), jFrame,
+                        Labels.getLabel("gui.groupby.loading"));
+            }
         });
     }
 
@@ -268,7 +273,11 @@ public class MonitorDbPanel {
         return row;
     }
 
-    private JPanel newGroupByPanel(java.util.function.Consumer<String> onChange) {
+    /**
+     * @param onChange     column chosen (null: wait class)
+     * @param redrawGroupBy "Hide (empty)" changed: redraw the grouped chart
+     */
+    private JPanel newGroupByPanel(java.util.function.Consumer<String> onChange, Runnable redrawGroupBy) {
         java.util.List<String> available = new java.util.ArrayList<>();
         java.util.List<config.profile.SqlColProfile> cols =
                 storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList();
@@ -287,14 +296,20 @@ public class MonitorDbPanel {
         groupByBox.setMaximumRowCount(GROUP_BY_COLUMNS.length + 1);
         groupByBox.setToolTipText(Labels.getLabel("gui.groupby.tooltip"));
 
+        gui.filter.EmptyToggle emptyToggle = new gui.filter.EmptyToggle(redrawGroupBy);
+        emptyToggle.setEnabled(false); // wait class has no "(empty)"
+
         groupByBox.addActionListener(e -> {
             String selected = (String) groupByBox.getSelectedItem();
-            onChange.accept(selected == null || selected.equals(waitClassItem) ? null : selected);
+            boolean byColumn = selected != null && !selected.equals(waitClassItem);
+            emptyToggle.setEnabled(byColumn);
+            onChange.accept(byColumn ? selected : null);
         });
 
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         panel.add(new JLabel(Labels.getLabel("gui.groupby.label")));
         panel.add(groupByBox);
+        panel.add(emptyToggle);
         if (hideBackgroundAvailable) {
             panel.add(Box.createHorizontalStrut(12));
             panel.add(new gui.filter.BackgroundToggle(ashFilter));
@@ -590,7 +605,7 @@ public class MonitorDbPanel {
         historyNorthPanel.add(mainStartEndDateTimePicker/*buttonPanel*/, BorderLayout.NORTH);
         JPanel historyFilterPanel = new JPanel(new BorderLayout());
         historyFilterPanel.add(newFilterBar(this::getHistoryRange), BorderLayout.NORTH);
-        historyFilterPanel.add(titleRow("History", newGroupByPanel(historyPanel::setGroupBy)), BorderLayout.CENTER);
+        historyFilterPanel.add(titleRow("History", newGroupByPanel(historyPanel::setGroupBy, historyPanel::refreshGroupBy)), BorderLayout.CENTER);
         historyNorthPanel.add(historyFilterPanel, BorderLayout.SOUTH);
 
         controlMainDetailHistory.add(historyNorthPanel, BorderLayout.NORTH);

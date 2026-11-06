@@ -215,6 +215,9 @@ public class ComparePanel extends JPanel implements IDetailPanel {
         JPanel itemsBar = new JPanel(new MigLayout("ins 4 6 2 6", "[][][]"));
         itemsBar.add(gui.util.Ui.title(Labels.getLabel("gui.compare.by")));
         itemsBar.add(dimensionBox);
+        itemsBar.add(new gui.filter.EmptyToggle(() -> {
+            if (last != null) showItems();
+        }), "gapleft 12");
         itemsBar.add(export, "gapleft 12");
         JLabel focusHint = new JLabel(Labels.getLabel("gui.compare.focus.hint"));
         focusHint.setEnabled(false);
@@ -530,7 +533,11 @@ public class ComparePanel extends JPanel implements IDetailPanel {
             return;
         }
         PeriodComparison.Measure measure = measure();
-        ItemsModel model = new ItemsModel(label(dimension), last.items(dimension, measure), last, measure);
+        List<PeriodComparison.Item> items = last.items(dimension, measure);
+        if (gui.filter.EmptyToggle.isHide()) { // "Hide (empty)": sessions without a value of the column
+            items = items.stream().filter(i -> !i.getValue().isEmpty()).collect(java.util.stream.Collectors.toList());
+        }
+        ItemsModel model = new ItemsModel(label(dimension), items, last, measure);
         lastItems = model;
         JXTable table = table(model);
         if (core.plsql.PlsqlNames.isPlsqlColumn(dimension)) { // OWNER.PACKAGE.PROCEDURE instead of the ids

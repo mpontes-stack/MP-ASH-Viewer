@@ -150,6 +150,9 @@ public class GroupByChart {
                 storeManager.getConfigurationManager().getCurrentConfiguration().getSqlColProfileList());
 
         Map<Double, Map<String, Integer>> byPoint = filteredAshLoader.countByValue(matcher, col, xValues, range);
+        if (gui.filter.EmptyToggle.isHide()) { // "Hide (empty)": sessions without a value of the column
+            byPoint.values().forEach(m -> m.remove(""));
+        }
 
         // Top values of the window
         Map<String, Integer> totals = new HashMap<>();
