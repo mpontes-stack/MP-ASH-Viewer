@@ -11,7 +11,10 @@ public class OracleSE extends OracleEE implements IProfile {
             + "vs.event# EVENT#, (CASE WHEN vs.wait_time != 0 THEN 'CPU used' ELSE vs.event END) EVENT, "
             + "vs.seq# SEQ#, vs.p1 P1, vs.p2 P2, vs.p3 P3, "
             + "vs.wait_time WAIT_TIME, vs.wait_class_id WAIT_CLASS_ID, vs.wait_class# WAIT_CLASS#, "
-            + "(CASE WHEN vs.wait_time != 0 THEN 'CPU used' ELSE vs.wait_class END) WAIT_CLASS, vss.value TIME_WAITED, "
+            + "(CASE WHEN vs.wait_time != 0 THEN 'CPU used' ELSE vs.wait_class END) WAIT_CLASS, "
+            // microseconds of the current wait so far, 0 on CPU (as in ASH); until 1.3.x it was v$sesstat
+            // statistic# 12 (user logons cumulative in 19c), not a time
+            + "(CASE WHEN vs.state = 'WAITING' THEN vs.wait_time_micro ELSE 0 END) TIME_WAITED, "
             + "vs.row_wait_obj# CURRENT_OBJ#, vs.row_wait_file# CURRENT_FILE#, vs.row_wait_block# CURRENT_BLOCK#, "
             + "vs.program PROGRAM, vs.module MODULE, vs.action ACTION, vs.fixed_table_sequence FIXED_TABLE_SEQUENCE, "
             + "nvl(au.name, 'UNKNOWN') COMMAND, "
@@ -33,10 +36,10 @@ public class OracleSE extends OracleEE implements IProfile {
             + "(CASE WHEN vs.plsql_entry_object_id IS NOT NULL "
             + "THEN vs.plsql_entry_object_id || '.' || vs.plsql_entry_subprogram_id END) PLSQL_ENTRY "
             + "FROM "
-            + "v$session vs, v$sesstat vss, audit_actions au "
+            + "v$session vs, audit_actions au "
             + "WHERE vs.sid != ( select distinct sid from v$mystat  where rownum < 2 ) "
-            + "and vs.sid = vss.sid and vs.command = au.action(+) "
-            + "and vss.statistic# = 12 and (vs.wait_class != 'Idle' or vs.wait_time != 0) )";
+            + "and vs.command = au.action(+) "
+            + "and (vs.wait_class != 'Idle' or vs.wait_time != 0) )";
 
     long interval = 1000; // 1 sec
 

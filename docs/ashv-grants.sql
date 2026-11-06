@@ -10,7 +10,6 @@ GRANT CREATE SESSION TO ashv;
 
 -- Collection, every second (OracleSE profile)
 GRANT SELECT ON sys.v_$session     TO ashv;
-GRANT SELECT ON sys.v_$sesstat     TO ashv;
 GRANT SELECT ON sys.v_$mystat      TO ashv;
 GRANT SELECT ON sys.audit_actions  TO ashv;
 GRANT SELECT ON sys.v_$sql         TO ashv;   -- plan of the running SQL; SQL texts (every 10 min)
