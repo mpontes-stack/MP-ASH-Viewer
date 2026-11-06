@@ -18,7 +18,9 @@ report to count on. This fork exists to keep that tool alive and to give somethi
 ## Main features
 
 - **Top Activity**: active sessions by wait class, live, with Top SQL and Top sessions of any selected range
-- **Filters**: by any collected column (module, username, machine, SQL_ID...), with favorites; "Group by" any column
+- **Filters**: by any collected column (module, username, machine, SQL_ID...), with favorites; "Group by" any column,
+  also by the **PL/SQL caller** (`OWNER.PACKAGE.PROCEDURE`, like the Top Level SQL of EM); one click hides the
+  background processes or the "(empty)" values
 - **History**: the local history of every connection, back to any day it was collected
 - **Compare**: two periods side by side (before / after a deploy, yesterday x today, two runs of a batch), by wait
   class and by SQL_ID, module, session...; detects **execution plan changes** and tells whether a SQL went up

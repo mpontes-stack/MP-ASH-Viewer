@@ -2,6 +2,29 @@
 
 Changes in each version of MP-ASH-Viewer. Downloads: [Releases](https://github.com/mpontes-stack/MP-ASH-Viewer/releases).
 
+## 1.4.0 (2026-11-06)
+
+New:
+
+- **Hide background** (Oracle), next to the Top Activity, History and Compare charts: hides the sessions of the
+  background processes (`SESSION_TYPE = BACKGROUND`: DBWn, LGWR, MMON...) in every chart and table. It is not one of
+  the filters (Clear and favorites keep it) and the choice is kept for the next connections.
+- **Hide (empty)**, next to "Group by" and "Compare by": leaves out the "(empty)" value of the grouped column
+  (sessions without MODULE, ACTION...) in the Group by charts and in the Compare by table.
+- **PL/SQL caller** (OracleSE): new column `PLSQL_ENTRY`. Group, compare or filter by it to see the SQLs run inside
+  one procedure as one block, like the "Top Level SQL" of Enterprise Manager, shown as `OWNER.PACKAGE.PROCEDURE`.
+  `PLSQL_ENTRY_OBJECT_ID` (by package) also shows names now. The names come from `dba_procedures` (new grant in
+  `docs/ashv-grants.sql`; falls back to `all_procedures`), looked up once per package while connected.
+- `TOP_LEVEL_SQL_ID` in "Group by" and "Compare by" for the OracleEE profile.
+
+Fixed:
+
+- OracleSE collection: `TIME_WAITED` was `v$sesstat` statistic# 12 (`user logons cumulative` in 19c), not a time,
+  and the join with `v$sesstat` was the most expensive part of the query run every second (about half of its time).
+  Now it is the time of the current wait in microseconds (`v$session.wait_time_micro`) and 0 on CPU, as in ASH. In
+  the history collected before 1.4.0 this column (Raw data, CSV) is a count of logons: do not use it as a time. The
+  `v_$sesstat` grant is no longer needed.
+
 ## 1.3.0 (2026-10-29)
 
 New:
