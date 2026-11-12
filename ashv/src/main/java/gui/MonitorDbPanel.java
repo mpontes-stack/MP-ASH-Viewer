@@ -218,7 +218,7 @@ public class MonitorDbPanel {
             "SQL_ID", "MODULE", "ACTION", "PROGRAM", "USERNAME", "OSUSER", "MACHINE", "SESSION_ID",
             "SERVICE_NAME", "CLIENT_IDENTIFIER", "CLIENT_INFO", "EVENT", "COMMAND", "SESSION_TYPE",
             "BLOCKING_SESSION", "FINAL_BLOCKING_SESSION", "PREV_SQL_ID", "SQL_HASH_VALUE",
-            "PLSQL_ENTRY_OBJECT_ID", "PLSQL_ENTRY", "TOP_LEVEL_SQL_ID", "CURRENT_OBJ#"};
+            "PLSQL_ENTRY_OBJECT_ID", "PLSQL_ENTRY", core.plsql.PlsqlSource.COLUMN, "TOP_LEVEL_SQL_ID", "CURRENT_OBJ#"};
 
     private JPanel chartCards;
     private boolean hideBackgroundAvailable;
@@ -284,16 +284,20 @@ public class MonitorDbPanel {
         if (cols != null) {
             cols.forEach(c -> available.add(c.getColName()));
         }
+        // PL/SQL source of the SQL: not collected, from SQL_ID and the texts kept every 10 minutes (Oracle)
+        if (available.contains("SQL_ID") && connProfile != null && IProfile.isOracle(connProfile.getProfileName())) {
+            available.add(core.plsql.PlsqlSource.COLUMN);
+        }
 
         JComboBox<String> groupByBox = new JComboBox<>();
         String waitClassItem = Labels.getLabel("gui.groupby.waitclass");
-        groupByBox.addItem(waitClassItem);
+        java.util.List<String> columns = new java.util.ArrayList<>();
         for (String col : GROUP_BY_COLUMNS) {
             if (available.contains(col)) {
-                groupByBox.addItem(col);
+                columns.add(col);
             }
         }
-        groupByBox.setMaximumRowCount(GROUP_BY_COLUMNS.length + 1);
+        gui.util.ColumnGroups.setItems(groupByBox, java.util.Collections.singletonList(waitClassItem), columns, c -> c);
         groupByBox.setToolTipText(Labels.getLabel("gui.groupby.tooltip"));
 
         gui.filter.EmptyToggle emptyToggle = new gui.filter.EmptyToggle(redrawGroupBy);

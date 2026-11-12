@@ -28,6 +28,11 @@ public class ParamStringStringDAO implements IParamStringStringDAO {
     }
 
     @Override
+    public void put(String parameter, String value) {
+        this.rdaStringParameterPrimIndex.put(new ParamStringString(parameter, value));
+    }
+
+    @Override
     public String getValue (String parameter){ return this.rdaStringParameterPrimIndex.get(parameter).getParamValue(); }
 
     @Override

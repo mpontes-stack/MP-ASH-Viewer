@@ -106,8 +106,18 @@ public final class HistoryStore {
     /** SQL texts kept in the history open in the app (tooltips, captured every 10 minutes), -1 when unknown */
     public static long sqlTextCount(StoreManager storeManager) {
         try {
-            return storeManager.getBerkleyDB().getStore()
-                    .getPrimaryIndex(String.class, store.entity.database.ParamStringString.class).count();
+            com.sleepycat.persist.PrimaryIndex<String, store.entity.database.ParamStringString> index =
+                    storeManager.getBerkleyDB().getStore()
+                            .getPrimaryIndex(String.class, store.entity.database.ParamStringString.class);
+            // the PL/SQL origins of the SQL are kept in the same store: not texts
+            long sources = 0;
+            String prefix = core.plsql.PlsqlSource.KEY_PREFIX;
+            try (com.sleepycat.persist.EntityCursor<String> keys = index.keys(prefix, true, prefix + '\uffff', false)) {
+                for (String ignored : keys) {
+                    sources++;
+                }
+            }
+            return index.count() - sources;
         } catch (Exception e) {
             return -1;
         }

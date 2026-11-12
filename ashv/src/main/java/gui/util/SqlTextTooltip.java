@@ -72,7 +72,8 @@ public final class SqlTextTooltip {
 
         String text = texts.cached(sqlId);
         if (text != null) {
-            setTip(table, html(sqlId, text));
+            setTip(table, html(sqlId, text, texts.source(sqlId)));
+            texts.fetchSource(sqlId, () -> refresh(table, sqlIdAt));
         } else if (texts.isNotFound(sqlId)) {
             setTip(table, message(sqlId, Labels.getLabel("gui.sqltext.notfound")));
         } else if (texts.canFetch(sqlId)) {
@@ -136,8 +137,12 @@ public final class SqlTextTooltip {
         return "<html><b>" + escape(sqlId) + "</b><br><i>" + escape(text) + "</i></html>";
     }
 
-    /** First lines of the text, long lines wrapped */
-    static String html(String sqlId, String text) {
+    /**
+     * First lines of the text, long lines wrapped
+     *
+     * @param source where the SQL is written in PL/SQL, null when unknown
+     */
+    static String html(String sqlId, String text, String source) {
         List<String> lines = new ArrayList<>();
         for (String line : text.replace("\t", "    ").replace("\r", "").split("\n")) {
             if (line.trim().isEmpty()) {
@@ -159,7 +164,12 @@ public final class SqlTextTooltip {
             lines = lines.subList(0, MAX_LINES);
         }
 
-        StringBuilder sb = new StringBuilder("<html><b>").append(escape(sqlId)).append("</b><pre>");
+        StringBuilder sb = new StringBuilder("<html><b>").append(escape(sqlId)).append("</b>");
+        if (source != null) {
+            sb.append("<br>").append(escape(Labels.getLabel("gui.plsqlsource.label"))).append(" <b>")
+                    .append(escape(source)).append("</b>");
+        }
+        sb.append("<pre>");
         for (String line : lines) {
             sb.append(escape(line)).append('\n');
         }

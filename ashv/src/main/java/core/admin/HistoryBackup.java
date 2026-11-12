@@ -209,6 +209,10 @@ public final class HistoryBackup {
                     textsOut.put(text);
                     textCount++;
                 }
+                ParamStringString origin = texts.get(core.plsql.PlsqlSource.KEY_PREFIX + sqlId); // PL/SQL origin
+                if (origin != null) {
+                    textsOut.put(origin);
+                }
             }
             long maxPlan = 0;
             PrimaryIndex<Long, SqlPlan> plans = source.getPrimaryIndex(Long.class, SqlPlan.class);

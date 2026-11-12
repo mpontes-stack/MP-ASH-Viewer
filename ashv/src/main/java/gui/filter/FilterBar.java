@@ -33,7 +33,7 @@ public class FilterBar extends JPanel {
             "WAIT_CLASS", "EVENT", "SQL_ID", "SESSION_ID", "USERNAME", "PROGRAM", "MODULE", "ACTION",
             "MACHINE", "OSUSER", "SERVICE_NAME", "CLIENT_IDENTIFIER", "CLIENT_INFO", "COMMAND",
             "SESSION_TYPE", "SESSION_STATE", "BLOCKING_SESSION", "BLOCKING_SESSION_STATUS",
-            "FINAL_BLOCKING_SESSION", "PLSQL_ENTRY_OBJECT_ID", "PLSQL_ENTRY", "TOP_LEVEL_SQL_ID", "PREV_SQL_ID",
+            "FINAL_BLOCKING_SESSION", "PLSQL_ENTRY_OBJECT_ID", "PLSQL_ENTRY", core.plsql.PlsqlSource.COLUMN, "TOP_LEVEL_SQL_ID", "PREV_SQL_ID",
             "SQL_HASH_VALUE",
             "CURRENT_OBJ#", "USER_ID");
 
@@ -217,6 +217,11 @@ public class FilterBar extends JPanel {
         }
 
         List<String> available = cols.stream().map(SqlColProfile::getColName).collect(Collectors.toList());
+        // PL/SQL source of the SQL: not collected, from SQL_ID (Oracle)
+        profile.IProfile iProfile = storeManager.getConfigurationManager().getIProfile();
+        if (available.contains("SQL_ID") && iProfile != null && iProfile.isOracle()) {
+            available.add(core.plsql.PlsqlSource.COLUMN);
+        }
 
         List<String> out = PREFERRED_COLUMNS.stream().filter(available::contains).collect(Collectors.toList());
         available.stream()

@@ -172,7 +172,8 @@ public class GroupByChart {
         Map<String, String> valueByName = new HashMap<>();
         top.forEach(v -> {
             String name = v.isEmpty() ? emptyLabel : core.plsql.PlsqlNames.display(col, v);
-            if (name.length() > MAX_LEGEND_TEXT && core.plsql.PlsqlNames.isPlsqlColumn(col) && name.indexOf('.') > 0) {
+            boolean plsqlName = core.plsql.PlsqlNames.isPlsqlColumn(col) || core.plsql.PlsqlSource.COLUMN.equals(col);
+            if (name.length() > MAX_LEGEND_TEXT && plsqlName && name.indexOf('.') > 0) {
                 name = name.substring(name.indexOf('.') + 1); // PACKAGE.PROCEDURE: the owner gives way first
             }
             if (name.length() > MAX_LEGEND_TEXT) {

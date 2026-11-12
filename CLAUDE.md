@@ -47,6 +47,8 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
   Now: OS (`SnapshotPanel.Page.OS` + `OsView`: deltas of `v$osstat` between refreshes), Admin (offline: History, Compare, Admin). Every tab and sub tab has a drawn icon (`gui/custom/TabIcon`).
 - Look: `gui/util/Ui.title` for blue section titles and `Ui.highlight` for bars apart from the background (filter
   bar); use them in new screens instead of new colors.
+- Column lists of Group by, Compare by and Add filter: `gui/util/ColumnGroups.setItems` (group titles that can not
+  be chosen, short descriptions in gray); a new column goes in its group in `ColumnGroups.GROUPS`.
 - UI texts through `config.Labels`: `messages.properties` in **English** (the default, also used for any missing
   key) and `messages_pt.properties` in Portuguese (UTF-8). `gui/util/Languages` applies the language chosen in the
   connection dialog (or the system one) at startup: texts, `Locale.setDefault` (number and date formats, date
@@ -65,7 +67,14 @@ mvn -q -o package -DskipTests        # from the repo root; offline `install` fai
   `SQL_EXEC_ID`, the plan of the running child (`v$sql` by sql_id + child_number) and `PLSQL_ENTRY`
   (`plsql_entry_object_id.plsql_entry_subprogram_id`; names from `dba_procedures` in `core/plsql/PlsqlNames`, once
   per package, off the EDT); `SqlTextCapture` reads
-  `v$sql` every 10 min in batches of 100 SQL_IDs.
+  `v$sql` every 10 min in batches of 100 SQL_IDs, with `program_id` / `program_line#`: the PL/SQL source of the SQL
+  (`core/plsql/PlsqlSource`: `dba_objects` + declarations in `dba_source` once per package body), kept in
+  `ParamStringString` under the key `PLSQL_SRC:<sql_id>` (value `object_id|line|name`, "" = not PL/SQL;
+  `|old` when the package changed after the cursor's first parse: `program_line#` is of that parse, so only
+  OWNER.PACKAGE is kept and it is read again later). In the CDB root, SQL of PDBs gets no source.
+  `PLSQL_SOURCE` (`PlsqlSource.COLUMN`) is a column that is not collected: `AshFilter.Matcher.column(name)` returns a
+  marker column whose `getValue` maps the SQL_ID of the row to its source; use `matcher.column` instead of looking up
+  the column profiles where Group by, Compare by and the filters read values.
 - **PDB:** many monitored databases are PDBs, where some `v$` views are empty (`v$resource_limit`) or show only the
   PDB. Check new `v$` queries inside the PDB and in the CDB (the test database is a PDB; `/ as sysdba` in the
   container is the CDB).
@@ -127,7 +136,8 @@ tools/testdb/testdb.sh status | stop | cleanup
 
 Scenarios: `cpu`, `io` (direct path reads), `plan_change` (same SQL_ID, new plan at half time: index made visible),
 `long_exec` (executions of several seconds), `many_execs` (short PK lookups), `lock` (row lock holder + waiters),
-`mixed`, `plsql` (package `ashv_pkg` with 3 procedures, each running its own SQL: `PLSQL_ENTRY`). Every session sets MODULE `ashv_test` and ACTION = scenario, so the app can filter them.
+`mixed`, `plsql` (package `ashv_pkg` with 3 procedures, each running its own SQL: `PLSQL_ENTRY`; `calc_total` runs its SQL
+through the private function `sum_sqrt`: PL/SQL source differs from the entry). Every session sets MODULE `ashv_test` and ACTION = scenario, so the app can filter them.
 The script refuses to connect unless port 1521 is published by the container: production databases are reached
 through SSM tunnels on localhost ports.
 

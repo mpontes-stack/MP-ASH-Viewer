@@ -16,8 +16,11 @@ GRANT SELECT ON sys.v_$sql         TO ashv;   -- plan of the running SQL; SQL te
 GRANT SELECT ON sys.v_$sql_plan    TO ashv;   -- execution plans in the SQL details
 GRANT SELECT ON sys.v_$sql_plan_statistics_all TO ashv;   -- DBMS_XPLAN tab, format "Actual rows (ALLSTATS LAST)"
 
--- Locks: object names (falls back to ALL_OBJECTS without it)
+-- Locks and PL/SQL source of the SQL: object names (falls back to ALL_OBJECTS without it)
 GRANT SELECT ON sys.dba_objects    TO ashv;
+-- PL/SQL source of the SQL: the procedure of a package body that holds the SQL (falls back to ALL_SOURCE; without
+-- both only OWNER.PACKAGE and the line are shown)
+GRANT SELECT ON sys.dba_source     TO ashv;
 -- Names of PLSQL_ENTRY / PLSQL_ENTRY_OBJECT_ID (package.procedure) in Group by, Compare and filters
 -- (falls back to ALL_PROCEDURES without it)
 GRANT SELECT ON sys.dba_procedures TO ashv;

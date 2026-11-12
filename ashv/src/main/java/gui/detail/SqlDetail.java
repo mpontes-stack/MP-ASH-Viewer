@@ -139,6 +139,7 @@ public class SqlDetail extends JFrame implements ActionListener {
         areaScrollPane.setVerticalScrollBarPolicy(
                 JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
         areaScrollPane.setPreferredSize(new Dimension(250, 250));
+        JComponent textPane = withPlsqlSource(areaScrollPane);
 
         /** SQL plan*/
         JTabbedPane tabsSQLPlan = new JTabbedPane();
@@ -188,7 +189,7 @@ public class SqlDetail extends JFrame implements ActionListener {
 
         });
 
-        sqlTextSplitPane.add(areaScrollPane, "top");
+        sqlTextSplitPane.add(textPane, "top");
         sqlTextSplitPane.add(tabsSQLPlan, "bottom");
         sqlTextSplitPane.setDividerLocation(150);
         sqlTextSplitPane.setOneTouchExpandable(true);
@@ -202,7 +203,7 @@ public class SqlDetail extends JFrame implements ActionListener {
         if (getFromRemoteAndStore.getIProfile().isOracle()) {
             this.tabsSessionDetails.add("Sql text/plan", sqlTextSplitPane);
         } else {
-            this.tabsSessionDetails.add("Sql text", areaScrollPane);
+            this.tabsSessionDetails.add("Sql text", textPane);
         }
         if (!getFromRemoteAndStore.getIProfile().getSqlStatsQuery().isEmpty()) {
             this.tabsSessionDetails.add("Statistics", tabsStatsDetails);
@@ -324,5 +325,26 @@ public class SqlDetail extends JFrame implements ActionListener {
     @Override
     public void actionPerformed(ActionEvent e) {
 
+    }
+
+    /** The SQL text with, above it, where the SQL is written in PL/SQL (looked up in background when unknown) */
+    private JComponent withPlsqlSource(JComponent text) {
+        core.sqltext.SqlTexts texts = core.sqltext.SqlTexts.get();
+        if (texts == null) {
+            return text;
+        }
+        JLabel source = new JLabel();
+        source.setBorder(javax.swing.BorderFactory.createEmptyBorder(3, 4, 3, 4));
+        Runnable show = () -> {
+            String where = texts.source(this.valueAtSqlId);
+            source.setText(where == null ? "" : config.Labels.getLabel("gui.plsqlsource.label") + " " + where);
+            source.setVisible(where != null);
+        };
+        show.run();
+        texts.fetchSource(this.valueAtSqlId, show);
+        JPanel panel = new JPanel(new java.awt.BorderLayout());
+        panel.add(source, java.awt.BorderLayout.NORTH);
+        panel.add(text, java.awt.BorderLayout.CENTER);
+        return panel;
     }
 }

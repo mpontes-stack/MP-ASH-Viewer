@@ -61,6 +61,10 @@ public class PeriodComparison {
         for (String candidate : candidates) {
             if (SESSION.equals(candidate)) {
                 if (sessionCol != null) dimensionCols.put(SESSION, sessionCol);
+            } else if (core.plsql.PlsqlSource.COLUMN.equals(candidate)) { // not collected: from SQL_ID
+                if (iProfile.isOracle()) {
+                    matcher.column(candidate).ifPresent(c -> dimensionCols.put(candidate, c));
+                }
             } else {
                 findCol(cols, candidate).ifPresent(c -> dimensionCols.put(candidate, c));
             }

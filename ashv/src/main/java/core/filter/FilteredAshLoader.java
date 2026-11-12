@@ -222,7 +222,7 @@ public class FilteredAshLoader {
                                                          List<Double> xValues, long range) {
         Map<Double, Map<String, Integer>> out = new HashMap<>();
 
-        Optional<SqlColProfile> col = findCol(getColProfiles(), colName);
+        Optional<SqlColProfile> col = matcher.column(colName); // also PLSQL_SOURCE (not collected)
         if (!col.isPresent() || xValues.isEmpty()) {
             return out;
         }
@@ -287,12 +287,11 @@ public class FilteredAshLoader {
         Map<String, Integer> out = new HashMap<>();
 
         List<SqlColProfile> cols = getColProfiles();
-        Optional<SqlColProfile> col = cols.stream().filter(c -> c.getColName().equalsIgnoreCase(colName)).findFirst();
+        AshFilter.Matcher matcher = ashFilter.matcher(cols, colName);
+        Optional<SqlColProfile> col = matcher.column(colName); // also PLSQL_SOURCE (not collected)
         if (!col.isPresent()) {
             return out;
         }
-
-        AshFilter.Matcher matcher = ashFilter.matcher(cols, colName);
 
         EntityCursor<MainData> cursor = storeManager.getDatabaseDAO().getMainDataDAO().getPrimaryIndex()
                 .entities(begin, true, end, false);

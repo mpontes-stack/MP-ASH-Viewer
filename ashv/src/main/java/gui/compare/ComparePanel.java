@@ -81,7 +81,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
     private static final List<String> DIMENSIONS = Arrays.asList(
             "SQL_ID", "EVENT", "MODULE", "ACTION", "PROGRAM", "USERNAME", "MACHINE", PeriodComparison.SESSION,
             "SERVICE_NAME", "CLIENT_IDENTIFIER", "COMMAND", "CURRENT_OBJ#", "PLSQL_ENTRY_OBJECT_ID", "PLSQL_ENTRY",
-            "TOP_LEVEL_SQL_ID",
+            core.plsql.PlsqlSource.COLUMN, "TOP_LEVEL_SQL_ID",
             "SESSION_TYPE", "OSUSER", "PREV_SQL_ID");
 
     private final StoreManager storeManager;
@@ -517,10 +517,7 @@ public class ComparePanel extends JPanel implements IDetailPanel {
 
         String selected = (String) dimensionBox.getSelectedItem();
         updatingBox = true;
-        dimensionBox.removeAllItems();
-        for (String d : result.getDimensions()) {
-            dimensionBox.addItem(d);
-        }
+        gui.util.ColumnGroups.setItems(dimensionBox, Collections.emptyList(), result.getDimensions(), ComparePanel::label);
         dimensionBox.setSelectedItem(selected != null && result.getDimensions().contains(selected)
                 ? selected : result.getDimensions().isEmpty() ? null : result.getDimensions().get(0));
         updatingBox = false;

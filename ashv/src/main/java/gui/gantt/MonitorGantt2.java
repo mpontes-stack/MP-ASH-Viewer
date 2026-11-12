@@ -248,14 +248,54 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         return out;
     }
 
+    /**
+     * PL/SQL origin of the SQL_ID of each row (kept with the SQL texts), null when no row has one
+     *
+     * @param sqlIdIndex index of the SQL_ID in the rows
+     */
+    private static String[] sources(java.util.List<Object[]> rows, int sqlIdIndex) {
+        core.sqltext.SqlTexts texts = core.sqltext.SqlTexts.get();
+        if (texts == null) {
+            return null;
+        }
+        String[] out = new String[rows.size()];
+        boolean any = false;
+        for (int r = 0; r < out.length; r++) {
+            Object sqlId = rows.get(r)[sqlIdIndex];
+            out[r] = sqlId == null ? null : texts.source(String.valueOf(sqlId));
+            any |= out[r] != null;
+        }
+        return any ? out : null;
+    }
+
+    private static String[] sources(Object[][] rows, int sqlIdIndex) {
+        return sources(Arrays.asList(rows), sqlIdIndex);
+    }
+
     private GanttTable getGanttDataToViewSqlId() {
         final GanttTable tableGanttSql;
         boolean withExecs = execStats != null;
         String[][] names = withExecs ? new String[][]{{columnNamesSqls[0][0], columnNamesSqls[0][1], columnNamesSqls[0][2],
                 Labels.getLabel("gui.gantt.execs"), Labels.getLabel("gui.gantt.tpe")}} : columnNamesSqls;
         Object[][] rows = ganttDataByIdSqlId.getDataToGantt(3);
+        if (withExecs) {
+            rows = withExecutions(rows);
+        }
+        // where each SQL is written in PL/SQL: a column only when some SQL has it
+        String[] sources = sources(rows, 1);
+        int sourceCol = -1;
+        if (sources != null) {
+            sourceCol = names[0].length;
+            String[] withSource = Arrays.copyOf(names[0], sourceCol + 1);
+            withSource[sourceCol] = Labels.getLabel("gui.plsqlsource.column");
+            names = new String[][]{withSource};
+            for (int r = 0; r < rows.length; r++) {
+                rows[r] = Arrays.copyOf(rows[r], sourceCol + 1);
+                rows[r][sourceCol] = sources[r] == null ? "" : sources[r];
+            }
+        }
         tableGanttSql = new GanttTable(
-                withExecs ? withExecutions(rows) : rows,
+                rows,
                 names,
                 getBasicJTableList(),
                 ganttDataByIdSqlId.getListClassAndEvents());
@@ -277,6 +317,12 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
             right.setHorizontalAlignment(SwingConstants.RIGHT);
             tableGanttSql.getJXTable().getColumnExt(3).setCellRenderer(right);
             tableGanttSql.getJXTable().getColumnExt(4).setCellRenderer(right);
+        }
+
+        if (sourceCol >= 0) {
+            tableGanttSql.getJXTable().getColumnExt(sourceCol).setEditable(false);
+            tableGanttSql.getJXTable().getColumnExt(sourceCol).setToolTipText(Labels.getLabel("gui.plsqlsource.tooltip"));
+            tableGanttSql.getJXTable().getColumnExt(sourceCol).setPreferredWidth(260); // OWNER.PACKAGE.PROCEDURE
         }
 
         tableGanttSql.getJXTable().setCellSelectionEnabled(true);
@@ -425,6 +471,15 @@ public class MonitorGantt2 extends JPanel implements IDetailPanel {
         header.add(Labels.getLabel("gui.export.col.samples"));
         header.addAll(Arrays.asList(columnNames).subList(1, columnNames.length));
         header.addAll(groups);
+        String[] sources = data == ganttDataByIdSqlId ? sources(rows, 2) : null;
+        if (sources != null) { // where each SQL is written in PL/SQL, last column
+            header.add(Labels.getLabel("gui.plsqlsource.column"));
+            for (int r = 0; r < rows.size(); r++) {
+                Object[] row = Arrays.copyOf(rows.get(r), rows.get(r).length + 1);
+                row[row.length - 1] = sources[r] == null ? "" : sources[r];
+                rows.set(r, row);
+            }
+        }
 
         CsvExport.save(this, CsvExport.fileName(
                 storeManager.getConfigurationManager().getCurrentConfiguration().getConfigName(), tab,

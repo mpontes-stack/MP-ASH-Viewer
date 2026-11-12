@@ -173,17 +173,30 @@ public class AshFilter {
     /**
      * Evaluates conditions against stored raw rows. Not thread safe, create one per task.
      */
+    /** The PLSQL_SOURCE column (not collected: derived from SQL_ID), see {@link Matcher#column} */
+    private static final SqlColProfile SOURCE_COL = new SqlColProfile();
+
+    static {
+        SOURCE_COL.setColName(core.plsql.PlsqlSource.COLUMN);
+        SOURCE_COL.setColDbTypeName("VARCHAR2");
+    }
+
     public class Matcher {
+        private final List<SqlColProfile> colProfiles;
+        private final SqlColProfile sqlIdCol;
+        /** SQL_ID -> PLSQL_SOURCE, read from the local history once per task */
+        private final Map<String, String> sourceCache = new HashMap<>();
         private final List<SqlColProfile> filterCols = new ArrayList<>();
         private final List<Set<String>> filterValues = new ArrayList<>();
         private final List<Boolean> filterExclusions = new ArrayList<>();
         private final Map<Integer, Map<Integer, String>> valueCache = new HashMap<>();
 
         private Matcher(List<SqlColProfile> colProfiles, Map<String, Set<String>> current) {
+            this.colProfiles = colProfiles == null ? Collections.emptyList() : colProfiles;
+            this.sqlIdCol = find(this.colProfiles, "SQL_ID").orElse(null);
             current.forEach((key, values) -> {
                 String colName = colOf(key);
-                Optional<SqlColProfile> col = colProfiles.stream()
-                        .filter(c -> c.getColName().equalsIgnoreCase(colName)).findFirst();
+                Optional<SqlColProfile> col = column(colName);
                 if (!col.isPresent()) {
                     log.info("Filter column not found: " + colName);
                 }
@@ -195,6 +208,16 @@ public class AshFilter {
 
         public boolean isEmpty() {
             return filterCols.isEmpty();
+        }
+
+        /**
+         * A collected column, or PLSQL_SOURCE (derived from SQL_ID, Oracle): read its values with {@link #getValue}
+         */
+        public Optional<SqlColProfile> column(String colName) {
+            if (core.plsql.PlsqlSource.COLUMN.equalsIgnoreCase(colName)) {
+                return sqlIdCol == null ? Optional.empty() : Optional.of(SOURCE_COL);
+            }
+            return find(colProfiles, colName);
         }
 
         public boolean matches(MainData sl, int row) {
@@ -217,6 +240,13 @@ public class AshFilter {
          * Value of a cell as shown in the Raw data table (cached per stored id)
          */
         public String getValue(SqlColProfile col, MainData sl, int row) {
+            if (col == SOURCE_COL) {
+                String sqlId = getValue(sqlIdCol, sl, row);
+                return sourceCache.computeIfAbsent(sqlId, id -> {
+                    core.sqltext.SqlTexts texts = core.sqltext.SqlTexts.get();
+                    return texts == null || id.isEmpty() ? "" : texts.sourceGroup(id);
+                });
+            }
             int[] rowData = sl.getMainMatrix()[row];
             if (col.getColId() > rowData.length) {
                 return String.valueOf(convertManager.getMatrixDataForJTable(col.getColDbTypeName(), col.getColId(), sl, row));
@@ -228,5 +258,10 @@ public class AshFilter {
                     .computeIfAbsent(intVal, k -> String.valueOf(
                             convertManager.getMatrixDataForJTable(col.getColDbTypeName(), col.getColId(), sl, row)));
         }
+    }
+
+    private static Optional<SqlColProfile> find(List<SqlColProfile> cols, String colName) {
+        return colName == null ? Optional.empty()
+                : cols.stream().filter(c -> c.getColName().equalsIgnoreCase(colName)).findFirst();
     }
 }

@@ -15,7 +15,6 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
@@ -83,8 +82,7 @@ public class AddFilterDialog extends JDialog {
             }
         });
 
-        columnBox.setModel(new DefaultComboBoxModel<>(columns.toArray(new String[0])));
-        columnBox.setMaximumRowCount(20);
+        gui.util.ColumnGroups.setItems(columnBox, java.util.Collections.emptyList(), columns, c -> c);
         columnBox.addActionListener(e -> loadValues());
 
         searchTF.putClientProperty("JTextField.placeholderText", Labels.getLabel("gui.filter.search"));

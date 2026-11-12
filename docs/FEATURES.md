@@ -57,6 +57,20 @@
   first (`plsql_entry_object_id` + `plsql_entry_subprogram_id` of `v$session`). `PLSQL_ENTRY_OBJECT_ID` groups by
   package. The names come from `dba_procedures` (or `all_procedures`), looked up once per package while connected;
   offline the ids are shown. SQL sent directly by the application, without a procedure, is "(empty)".
+- **PL/SQL source of the SQL** (Oracle): where each SQL is written, `OWNER.PACKAGE.PROCEDURE (line N)`, in the SQL
+  tooltips, in the details of the SQL and as a column of Top SQL (also in its CSV). It is not the PL/SQL caller: in a
+  big package one entry point runs SQL written in many inner procedures, and this shows which one. It comes from
+  `program_id` / `program_line#` of `v$sql`, read with the SQL texts every 10 minutes (or when the tooltip of a SQL
+  without it is shown) and kept in the local history, so it is also shown offline and in imported histories. The
+  procedure of a package body is the last `PROCEDURE` / `FUNCTION` declared before the line in `dba_source`
+  (a procedure nested inside another can be named wrong). SQL that is no longer in the shared pool has no source.
+  The line is the one of the first parse of the cursor: when the package was changed after it (a deploy), only
+  `OWNER.PACKAGE (line N of an older version of the package)` is shown, until the SQL is parsed again. Connected to
+  the CDB root, the SQL of the PDBs has no source (their objects are not visible from the root).
+  **Group by / Compare by / filter `PLSQL_SOURCE`**: the same source without the line, as a column, to see which inner
+  procedure of a package takes the time and compare two periods by it (double click a series of the chart, or right
+  click a row of the comparison, to filter by it). It is not collected: each sample takes it from its SQL_ID, so
+  samples whose SQL has no source yet are "(empty)" (Hide (empty) leaves them out).
 - **Hide background** (Oracle), next to the Top Activity, History and Compare charts: hides the sessions of the
   background processes (`SESSION_TYPE = BACKGROUND`: DBWn, LGWR, MMON...), which often fill "(empty)" when grouping by
   MODULE or ACTION. It is not one of the filters (Clear and favorites keep it) and the choice is kept for the next
@@ -194,7 +208,8 @@ refreshes (the first one reads twice, 3 s apart).
 | When | Query | Views |
 |---|---|---|
 | Every second (OracleSE) | active sessions; for the running SQL its plan hash value | `v$session`, `v$mystat`, `audit_actions`, `v$sql` (by SQL_ID + child number) |
-| Every 10 min | texts of the SQL_IDs collected, batches of 100 | `v$sql` |
+| Every 10 min | texts and PL/SQL source (`program_id`, `program_line#`) of the SQL_IDs collected, batches of 100 | `v$sql` |
+| PL/SQL source of new objects | object names (batch), declarations of a package body once per package | `dba_objects`, `dba_source` (or `all_*`) |
 | On demand | SQL text, plan, session and SQL details | `v$sql`, `v$sql_plan`, `v$session` |
 | DBMS_XPLAN tab | plan text of a child cursor | `DBMS_XPLAN.DISPLAY_CURSOR` (`v$sql_plan`, `v$sql_plan_statistics_all`) |
 | Locks | object names of the ids shown | `dba_objects` (or `all_objects`) |
