@@ -185,6 +185,8 @@ refreshes (the first one reads twice, 3 s apart).
   files follow the system (as Excel does).
 - Light, dark and classic themes.
 - **About**: version, project page, credits and the system information to copy into a bug report.
+  **Check for updates** asks GitHub for the latest release only when clicked (the app never connects to the
+  internet by itself) and shows its notes and the download page; nothing is downloaded or installed.
 
 ## Known limits
 

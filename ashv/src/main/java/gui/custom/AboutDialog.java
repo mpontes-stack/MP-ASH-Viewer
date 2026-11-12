@@ -47,9 +47,13 @@ public final class AboutDialog {
         });
         JButton close = new JButton(Labels.getLabel("gui.import.close"));
         close.addActionListener(e -> dialog.dispose());
+        JButton update = new JButton(Labels.getLabel("gui.update.check"));
+        update.setToolTipText(Labels.getLabel("gui.update.check.tooltip"));
+        update.addActionListener(e -> checkForUpdates(dialog, update));
 
         JPanel panel = content();
-        panel.add(copy, "span, split 2, right, gaptop 12");
+        panel.add(update, "span, split 3, left, gaptop 12, pushx");
+        panel.add(copy, "right");
         panel.add(close);
         dialog.setContentPane(panel);
         dialog.getRootPane().setDefaultButton(close);
@@ -57,6 +61,82 @@ public final class AboutDialog {
         dialog.setResizable(false);
         dialog.setLocationRelativeTo(owner);
         dialog.setVisible(true);
+    }
+
+    /** Ask GitHub in the background (only on this click), then show the answer */
+    private static void checkForUpdates(JDialog owner, JButton button) {
+        String text = button.getText();
+        button.setEnabled(false);
+        button.setText(Labels.getLabel("gui.update.checking"));
+        new javax.swing.SwingWorker<core.update.UpdateCheck.Result, Void>() {
+            @Override
+            protected core.update.UpdateCheck.Result doInBackground() {
+                return core.update.UpdateCheck.check();
+            }
+
+            @Override
+            protected void done() {
+                button.setEnabled(true);
+                button.setText(text);
+                core.update.UpdateCheck.Result result;
+                try {
+                    result = get();
+                } catch (Exception e) {
+                    return;
+                }
+                showUpdate(owner, result);
+            }
+        }.execute();
+    }
+
+    private static void showUpdate(JDialog owner, core.update.UpdateCheck.Result result) {
+        String title = Labels.getLabel("gui.update.title");
+        if (result.error != null) {
+            ask(owner, title, javax.swing.JOptionPane.WARNING_MESSAGE, result.page,
+                    new JLabel(String.format(Labels.getLabel("gui.update.error"), result.error)),
+                    new JLabel(Labels.getLabel("gui.update.error.hint")));
+            return;
+        }
+        if (!result.newer) {
+            javax.swing.JOptionPane.showMessageDialog(owner,
+                    String.format(Labels.getLabel("gui.update.latest"), AppLogo.VERSION), title,
+                    javax.swing.JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        // plain text components: nothing from the answer is shown as HTML
+        javax.swing.JTextArea notes = new javax.swing.JTextArea(result.notes, 12, 70);
+        notes.setEditable(false);
+        notes.setLineWrap(true);
+        notes.setWrapStyleWord(true);
+        notes.setCaretPosition(0);
+        JLabel available = new JLabel(String.format(Labels.getLabel("gui.update.available"), result.latest, AppLogo.VERSION));
+        available.setFont(available.getFont().deriveFont(Font.BOLD));
+        ask(owner, title, javax.swing.JOptionPane.INFORMATION_MESSAGE, result.page, available,
+                new JLabel(Labels.getLabel("gui.update.notes")), new javax.swing.JScrollPane(notes),
+                new JLabel(Labels.getLabel("gui.update.howto")));
+    }
+
+    /** Message with "Open the download page" and "Close" */
+    private static void ask(JDialog owner, String title, int type, String page, Object... message) {
+        String open = Labels.getLabel("gui.update.open");
+        String close = Labels.getLabel("gui.import.close");
+        int choice = javax.swing.JOptionPane.showOptionDialog(owner, message, title, javax.swing.JOptionPane.DEFAULT_OPTION,
+                type, null, new Object[]{open, close}, open);
+        if (choice == 0) {
+            browse(page);
+        }
+    }
+
+    private static void browse(String url) {
+        try {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(new URI(url));
+                return;
+            }
+        } catch (Exception ex) {
+            log.info("Open " + url + ": " + ex.getMessage());
+        }
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(url), null);
     }
 
     /** The content of the window (without the buttons) */
