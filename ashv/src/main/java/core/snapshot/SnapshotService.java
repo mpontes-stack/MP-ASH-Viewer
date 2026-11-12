@@ -59,6 +59,8 @@ public class SnapshotService {
         public final String error;
         public final long elapsedMs;
         boolean isLostConnection;
+        /** The driver failed outside SQLException: the connection is not given back to the pool */
+        boolean isBrokenConnection;
         /** No SELECT on a view of the query */
         boolean noPermission;
 
@@ -80,6 +82,11 @@ public class SnapshotService {
         static Result error(String error) {
             return new Result(Collections.emptyList(), Collections.emptyList(), error, 0);
         }
+
+        /** A failure outside the query (e.g. the thread that ran it was interrupted) */
+        public static Result failed(String error) {
+            return error(error);
+        }
     }
 
     /**
@@ -90,6 +97,11 @@ public class SnapshotService {
      */
     public Map<String, Result> run(Map<String, String> queries, Map<String, String> views) {
         Map<String, Result> out = new LinkedHashMap<>();
+        // ojdbc8 interrupts the thread a moment after cancelling a query that timed out: a thread that ran one would
+        // fail every next query (the SQL text capture runs always on the same thread)
+        if (Thread.interrupted()) {
+            log.debug("Snapshot: interrupt left by the driver cleared");
+        }
 
         try (Connection connection = getConnectionWithTimeout()) {
             setNetworkTimeout(connection, NETWORK_TIMEOUT_MS);
@@ -104,6 +116,9 @@ public class SnapshotService {
                     out.put(query.getKey(), result);
                     if (result.isLostConnection) {
                         lostConnection = result.error;
+                    }
+                    if (result.isBrokenConnection) {
+                        invalidate(connection);
                     }
                 }
             } finally {
@@ -138,7 +153,7 @@ public class SnapshotService {
             return c;
         });
         try {
-            return future.get(RemoteDBManager.TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+            return getIgnoringInterrupts(future, RemoteDBManager.TIMEOUT_SECONDS * 1000L);
         } catch (java.util.concurrent.TimeoutException e) {
             abandoned.set(true);
             pendingConnect = future;
@@ -156,6 +171,38 @@ public class SnapshotService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new SQLException(e);
+        }
+    }
+
+    /**
+     * Wait for the connection until the deadline. ojdbc8 interrupts the thread {@link #NETWORK_TIMEOUT_MS} after the
+     * start of a query cancelled by its timeout (a task it scheduled and could not remove): that late interrupt
+     * would fail the next query of the thread. Nothing in the app interrupts these threads on purpose.
+     */
+    private static Connection getIgnoringInterrupts(java.util.concurrent.Future<Connection> future, long timeoutMs)
+            throws java.util.concurrent.ExecutionException, java.util.concurrent.TimeoutException, InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        for (int interrupts = 0; ; interrupts++) {
+            try {
+                return future.get(Math.max(0, deadline - System.currentTimeMillis()), java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                if (interrupts >= 3) {
+                    throw e;
+                }
+                log.debug("Snapshot: interrupt while waiting for a connection ignored");
+            }
+        }
+    }
+
+    /**
+     * A connection in an unknown state: aborted (socket closed), so the pool drops it at the next validation instead
+     * of waiting {@link RemoteDBManager#TIMEOUT_SECONDS} on it (DBCP2 2.0 has no invalidateConnection)
+     */
+    private static void invalidate(Connection connection) {
+        try {
+            connection.abort(Runnable::run);
+        } catch (Throwable e) {
+            log.info("Snapshot: abort connection: " + e);
         }
     }
 
@@ -203,6 +250,12 @@ public class SnapshotService {
             }
         } catch (SQLTimeoutException e) {
             return Result.error(String.format(Labels.getLabel("gui.snapshot.err.timeout"), QUERY_TIMEOUT_SEC));
+        } catch (RuntimeException e) { // driver errors outside SQLException (seen on a query timeout with ojdbc8)
+            log.info("Snapshot query failed: " + e);
+            Result result = Result.error(String.format(Labels.getLabel("gui.snapshot.err.timeout"), QUERY_TIMEOUT_SEC));
+            result.isLostConnection = true; // the state of the connection is unknown: no more queries on it
+            result.isBrokenConnection = true;
+            return result;
         } catch (java.sql.SQLRecoverableException e) { // socket read timeout / connection lost
             log.info("Snapshot connection lost: " + e.getMessage());
             Result result = Result.error(String.format(Labels.getLabel("gui.snapshot.err.noanswer"), RemoteDBManager.TIMEOUT_SECONDS));
