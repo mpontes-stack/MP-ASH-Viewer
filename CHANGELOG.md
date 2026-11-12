@@ -2,6 +2,30 @@
 
 Changes in each version of MP-ASH-Viewer. Downloads: [Releases](https://github.com/mpontes-stack/MP-ASH-Viewer/releases).
 
+## 1.5.0 (2026-11-12)
+
+New:
+
+- **PL/SQL source of the SQL** (Oracle): where each SQL is written, `OWNER.PACKAGE.PROCEDURE (line N)`, in the SQL
+  tooltips, in the details of the SQL and as a column of Top SQL (also in its CSV). It is not the PL/SQL caller
+  (`PLSQL_ENTRY`, the procedure the application called): in a big package one entry point runs SQL written in many
+  inner procedures, and this shows which one, with the line. It comes from `program_id` / `program_line#` of `v$sql`,
+  read with the SQL texts every 10 minutes and kept in the local history (also shown offline, in imported histories
+  and backups). The procedure of a package body comes from its declarations in `dba_source`, read once per package
+  (new grant in `docs/ashv-grants.sql`; falls back to `all_source`). When the package was changed after the SQL was
+  parsed (a deploy), only `OWNER.PACKAGE (line N of an older version of the package)` is shown until the SQL is
+  parsed again.
+- **`PLSQL_SOURCE`** in "Group by", "Compare by" and the filters: which inner procedure takes the time, compared
+  between two periods. It is not collected: each sample takes it from its SQL_ID, without any new query.
+- The column lists of "Group by", "Compare by" and "Add filter" are grouped (Wait, SQL, PL/SQL, Session,
+  Application, Locks), with a short description of `PLSQL_ENTRY` (top-level PL/SQL) and `PLSQL_SOURCE`.
+
+Fixed:
+
+- A query of the Now tabs, SQL details or SQL texts cancelled by its 10 s timeout could leave its connection broken
+  in the pool (the next query waited 15 s and failed) and break the next queries of the same thread (ojdbc8). The
+  connection is now dropped and the next queries work.
+
 ## 1.4.0 (2026-11-06)
 
 New:
